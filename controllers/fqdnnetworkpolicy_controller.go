@@ -483,7 +483,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 				}
 				// check for AAAA lookups skip annotation
 				if fqdnNetworkPolicy.Annotations[aaaaLookupsAnnotation] == "skip" || r.Config.SkipAAAA {
-					log.Info("FQDNNetworkPolicy has AAAA lookups policy set to skip, not resolving AAAA records")
+					log.V(1).Info("FQDNNetworkPolicy has AAAA lookups policy set to skip, not resolving AAAA records")
 				} else {
 					// AAAA records
 					m6 := new(dns.Msg)
