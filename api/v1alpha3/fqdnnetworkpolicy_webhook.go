@@ -17,6 +17,8 @@ limitations under the License.
 package v1alpha3
 
 import (
+	"context"
+
 	"golang.org/x/net/idna"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -42,10 +44,10 @@ func (r *FQDNNetworkPolicy) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 //+kubebuilder:webhook:path=/mutate-networking-gke-io-v1alpha3-fqdnnetworkpolicy,mutating=true,failurePolicy=fail,sideEffects=None,groups=networking.gke.io,resources=fqdnnetworkpolicies,verbs=create;update,versions=v1alpha3,name=mfqdnnetworkpolicy.kb.io,admissionReviewVersions=v1
 
-var _ webhook.Defaulter = &FQDNNetworkPolicy{}
+var _ webhook.CustomDefaulter = &FQDNNetworkPolicy{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
-func (r *FQDNNetworkPolicy) Default() {
+func (r *FQDNNetworkPolicy) Default(ctx context.Context, obj runtime.Object) error {
 	fqdnnetworkpolicylog.Info("default", "name", r.Name)
 
 	// TODO(user): fill in your defaulting logic.
@@ -77,15 +79,17 @@ func (r *FQDNNetworkPolicy) Default() {
 			}
 		}
 	}
+
+	return nil
 }
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 //+kubebuilder:webhook:path=/validate-networking-gke-io-v1alpha3-fqdnnetworkpolicy,mutating=false,failurePolicy=fail,sideEffects=None,groups=networking.gke.io,resources=fqdnnetworkpolicies,verbs=create;update,versions=v1alpha3,name=vfqdnnetworkpolicy.kb.io,admissionReviewVersions=v1
 
-var _ webhook.Validator = &FQDNNetworkPolicy{}
+var _ webhook.CustomValidator = &FQDNNetworkPolicy{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *FQDNNetworkPolicy) ValidateCreate() (admission.Warnings, error) {
+func (r *FQDNNetworkPolicy) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	fqdnnetworkpolicylog.Info("validate create", "name", r.Name)
 
 	// TODO(user): fill in your validation logic upon object creation.
@@ -102,7 +106,7 @@ func (r *FQDNNetworkPolicy) ValidateCreate() (admission.Warnings, error) {
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *FQDNNetworkPolicy) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
+func (r *FQDNNetworkPolicy) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	fqdnnetworkpolicylog.Info("validate update", "name", r.Name)
 
 	// TODO(user): fill in your validation logic upon object update.
@@ -119,7 +123,7 @@ func (r *FQDNNetworkPolicy) ValidateUpdate(old runtime.Object) (admission.Warnin
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *FQDNNetworkPolicy) ValidateDelete() (admission.Warnings, error) {
+func (r *FQDNNetworkPolicy) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	fqdnnetworkpolicylog.Info("validate delete", "name", r.Name)
 
 	// TODO(user): fill in your validation logic upon object deletion.
