@@ -24,6 +24,8 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	networkingv1alpha3 "github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3"
+	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/controllers"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -32,9 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-
-	networkingv1alpha3 "github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3"
-	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/controllers"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -62,7 +61,7 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&skipAAAA, "skip-aaaa", false, "Skip AAAA lookups")
-	flag.IntVar(&nextSyncPeriod, "next-sync-period", 30, "Highest value possible for the re-sync time on the FQDNNetworkPolicy, respecting the DNS TTL.")
+	flag.IntVar(&nextSyncPeriod, "next-sync-period", 3600, "Highest value possible for the re-sync time on the FQDNNetworkPolicy, respecting the DNS TTL.")
 
 	opts := zap.Options{
 		Development: true,
