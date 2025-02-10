@@ -152,7 +152,7 @@ func (r *FQDNNetworkPolicy) ValidatePorts() field.ErrorList {
 							Index(ie).Child("ports").Index(ip).Child("port").String())
 				}
 				if *port.Protocol != v1.ProtocolTCP && *port.Protocol != v1.ProtocolUDP &&
-						*port.Protocol != v1.ProtocolSCTP && *port.Protocol != "" {
+					*port.Protocol != v1.ProtocolSCTP && *port.Protocol != "" {
 					allErrs = append(allErrs, field.Invalid(field.NewPath("spec").Child("egress").
 						Index(ie).Child("ports").Index(ip).Child("protocol"),
 						port.Port, "Invalid protocol. Must be TCP, UDP, or SCTP."))
@@ -176,7 +176,7 @@ func (r *FQDNNetworkPolicy) ValidatePorts() field.ErrorList {
 							Index(ii).Child("ports").Index(ip).Child("port").String())
 				}
 				if *port.Protocol != v1.ProtocolTCP && *port.Protocol != v1.ProtocolUDP &&
-						*port.Protocol != v1.ProtocolSCTP && *port.Protocol != "" {
+					*port.Protocol != v1.ProtocolSCTP && *port.Protocol != "" {
 					allErrs = append(allErrs, field.Invalid(field.NewPath("spec").Child("ingress").
 						Index(ii).Child("ports").Index(ip).Child("protocol"),
 						port.Port, "Invalid protocol. Must be TCP, UDP, or SCTP."))
