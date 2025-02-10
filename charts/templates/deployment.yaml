@@ -30,7 +30,7 @@ spec:
             - --leader-elect
             - --zap-log-level=error
             - --skip-aaaa
-            - --next-sync-period=60
+            - --next-sync-period=3600
           command:
             - /manager
           env:
