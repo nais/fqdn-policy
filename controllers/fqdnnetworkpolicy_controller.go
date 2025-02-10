@@ -27,6 +27,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	networkingv1alpha3 "github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3"
 	"github.com/go-logr/logr"
@@ -177,6 +178,11 @@ func (r *FQDNNetworkPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	mgr.GetFieldIndexer()
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&networkingv1alpha3.FQDNNetworkPolicy{}).
+			WithEventFilter(predicate.Or(
+				predicate.GenerationChangedPredicate{},
+				predicate.AnnotationChangedPredicate{},
+				predicate.LabelChangedPredicate{},
+			)).
 		Complete(r)
 }
 
