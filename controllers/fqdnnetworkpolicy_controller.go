@@ -17,9 +17,11 @@ limitations under the License.
 package controllers
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -315,7 +317,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 	// TODO what do we do if nothing resolves, or if the list is empty?
 	// What's the behavior of NetworkPolicies in that case?
 	for _, frule := range fir {
-		peers := []networking.NetworkPolicyPeer{}
+		peers := make([]networking.NetworkPolicyPeer, 0)
 		for _, from := range frule.From {
 			for _, fqdn := range from.FQDNs {
 				f := fqdn
@@ -403,6 +405,11 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 			continue
 		}
 
+		// Sort peers to prevent unnecessary updates
+		slices.SortFunc(peers, func(a, b networking.NetworkPolicyPeer) int {
+			return cmp.Compare(a.IPBlock.CIDR, b.IPBlock.CIDR)
+		})
+
 		rules = append(rules, networking.NetworkPolicyIngressRule{
 			Ports: frule.Ports,
 			From:  peers,
@@ -436,7 +443,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 	// TODO what do we do if nothing resolves, or if the list is empty?
 	// What's the behavior of NetworkPolicies in that case?
 	for _, frule := range fer {
-		peers := []networking.NetworkPolicyPeer{}
+		peers := make([]networking.NetworkPolicyPeer, 0)
 		for _, to := range frule.To {
 			for _, fqdn := range to.FQDNs {
 				f := fqdn
@@ -527,6 +534,11 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 			log.V(1).Info("No peers found, skipping egress rule.")
 			continue
 		}
+
+		// Sort peers to prevent unnecessary updates
+		slices.SortFunc(peers, func(a, b networking.NetworkPolicyPeer) int {
+			return cmp.Compare(a.IPBlock.CIDR, b.IPBlock.CIDR)
+		})
 
 		rules = append(rules, networking.NetworkPolicyEgressRule{
 			Ports: frule.Ports,
