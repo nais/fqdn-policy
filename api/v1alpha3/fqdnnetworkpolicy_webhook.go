@@ -18,6 +18,7 @@ package v1alpha3
 
 import (
 	"context"
+	"fmt"
 
 	"golang.org/x/net/idna"
 	v1 "k8s.io/api/core/v1"
@@ -50,16 +51,21 @@ var _ webhook.CustomDefaulter = &FQDNNetworkPolicy{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *FQDNNetworkPolicy) Default(ctx context.Context, obj runtime.Object) error {
-	fqdnnetworkpolicylog.Info("default", "name", r.Name)
+	policy, ok := obj.(*FQDNNetworkPolicy)
+	if !ok {
+		return fmt.Errorf("expected an FQDNNetworkPolicy but got a %T", obj)
+	}
+
+	fqdnnetworkpolicylog.Info("default", "name", policy.Name)
 
 	// TODO(user): fill in your defaulting logic.
-	for ie, rule := range r.Spec.Egress {
+	for ie, rule := range policy.Spec.Egress {
 		if rule.Ports != nil {
 			for ip, port := range rule.Ports {
 				if *port.Protocol == "" {
 					fqdnnetworkpolicylog.V(1).Info("No protocol set, defaulting to TCP",
-						"namespace", r.ObjectMeta.Namespace,
-						"name", r.ObjectMeta.Name,
+						"namespace", policy.ObjectMeta.Namespace,
+						"name", policy.ObjectMeta.Name,
 						"path", field.NewPath("spec").Child("egress").
 							Index(ie).Child("ports").Index(ip).String())
 					*port.Protocol = v1.ProtocolTCP
@@ -67,13 +73,13 @@ func (r *FQDNNetworkPolicy) Default(ctx context.Context, obj runtime.Object) err
 			}
 		}
 	}
-	for ii, rule := range r.Spec.Ingress {
+	for ii, rule := range policy.Spec.Ingress {
 		if rule.Ports != nil {
 			for ip, port := range rule.Ports {
 				if *port.Protocol == "" {
 					fqdnnetworkpolicylog.V(1).Info("No protocol set, defaulting to TCP",
-						"namespace", r.ObjectMeta.Namespace,
-						"name", r.ObjectMeta.Name,
+						"namespace", policy.ObjectMeta.Namespace,
+						"name", policy.ObjectMeta.Name,
 						"path", field.NewPath("spec").Child("ingress").
 							Index(ii).Child("ports").Index(ip).String())
 					*port.Protocol = v1.ProtocolTCP
@@ -92,12 +98,16 @@ var _ webhook.CustomValidator = &FQDNNetworkPolicy{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *FQDNNetworkPolicy) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	fqdnnetworkpolicylog.Info("validate create", "name", r.Name)
+	policy, ok := obj.(*FQDNNetworkPolicy)
+	if !ok {
+		return nil, fmt.Errorf("expected an FQDNNetworkPolicy but got a %T", obj)
+	}
+	fqdnnetworkpolicylog.Info("validate create", "name", policy.Name)
 
 	// TODO(user): fill in your validation logic upon object creation.
 	var allErrs field.ErrorList
-	allErrs = append(allErrs, r.ValidatePorts()...)
-	allErrs = append(allErrs, r.ValidateFQDNs()...)
+	allErrs = append(allErrs, policy.ValidatePorts()...)
+	allErrs = append(allErrs, policy.ValidateFQDNs()...)
 
 	if len(allErrs) == 0 {
 		return nil, nil
@@ -109,12 +119,16 @@ func (r *FQDNNetworkPolicy) ValidateCreate(ctx context.Context, obj runtime.Obje
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *FQDNNetworkPolicy) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	fqdnnetworkpolicylog.Info("validate update", "name", r.Name)
+	policy, ok := newObj.(*FQDNNetworkPolicy)
+	if !ok {
+		return nil, fmt.Errorf("expected an FQDNNetworkPolicy but got a %T", newObj)
+	}
+	fqdnnetworkpolicylog.Info("validate update", "name", policy.Name)
 
 	// TODO(user): fill in your validation logic upon object update.
 	var allErrs field.ErrorList
-	allErrs = append(allErrs, r.ValidatePorts()...)
-	allErrs = append(allErrs, r.ValidateFQDNs()...)
+	allErrs = append(allErrs, policy.ValidatePorts()...)
+	allErrs = append(allErrs, policy.ValidateFQDNs()...)
 
 	if len(allErrs) == 0 {
 		return nil, nil
@@ -126,7 +140,11 @@ func (r *FQDNNetworkPolicy) ValidateUpdate(ctx context.Context, oldObj, newObj r
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *FQDNNetworkPolicy) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	fqdnnetworkpolicylog.Info("validate delete", "name", r.Name)
+	policy, ok := obj.(*FQDNNetworkPolicy)
+	if !ok {
+		return nil, fmt.Errorf("expected an FQDNNetworkPolicy but got a %T", obj)
+	}
+	fqdnnetworkpolicylog.Info("validate delete", "name", policy.Name)
 
 	// TODO(user): fill in your validation logic upon object deletion.
 	return nil, nil
