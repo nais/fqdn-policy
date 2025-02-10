@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -148,7 +149,7 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 		return ctrl.Result{RequeueAfter: retry}, nil
 	}
-	log.Info("NetworkPolicy updated, next sync in " + fmt.Sprint(nextSyncIn))
+	log.Info("NetworkPolicy processed, next sync in " + fmt.Sprint(nextSyncIn))
 
 	// Need to fetch the object again before updating it
 	// as its status may have changed since the first time
@@ -180,16 +181,15 @@ func (r *FQDNNetworkPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	mgr.GetFieldIndexer()
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&networkingv1alpha3.FQDNNetworkPolicy{}).
-			WithEventFilter(predicate.Or(
-				predicate.GenerationChangedPredicate{},
-				predicate.AnnotationChangedPredicate{},
-				predicate.LabelChangedPredicate{},
-			)).
+		WithEventFilter(predicate.Or(
+			predicate.GenerationChangedPredicate{},
+			predicate.AnnotationChangedPredicate{},
+			predicate.LabelChangedPredicate{},
+		)).
 		Complete(r)
 }
 
-func (r *FQDNNetworkPolicyReconciler) updateNetworkPolicy(ctx context.Context,
-	fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) (*time.Duration, error) {
+func (r *FQDNNetworkPolicyReconciler) updateNetworkPolicy(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) (*time.Duration, error) {
 	log := r.Log.WithValues("fqdnnetworkpolicy", fqdnNetworkPolicy.Namespace+"/"+fqdnNetworkPolicy.Name)
 	toCreate := false
 
@@ -219,51 +219,46 @@ func (r *FQDNNetworkPolicyReconciler) updateNetworkPolicy(ctx context.Context,
 		return nil, errors.New("NetworkPolicy missing owned-by annotation or owned by a different resource")
 	}
 
-	// Updating NetworkPolicy
-	networkPolicy.Name = fqdnNetworkPolicy.Name
-	networkPolicy.Namespace = fqdnNetworkPolicy.Namespace
-	if networkPolicy.Annotations == nil {
-		networkPolicy.Annotations = make(map[string]string)
-	}
-	networkPolicy.Annotations[ownerAnnotation] = fqdnNetworkPolicy.Name
-	networkPolicy.Spec.PodSelector = fqdnNetworkPolicy.Spec.PodSelector
-	networkPolicy.Spec.PolicyTypes = fqdnNetworkPolicy.Spec.PolicyTypes
-	// egress rules
 	egressRules, nextSync, err := r.getNetworkPolicyEgressRules(ctx, fqdnNetworkPolicy)
 	if err != nil {
 		return nil, err
 	}
-	networkPolicy.Spec.Egress = egressRules
-	// ingress rules
+
 	ingressRules, ingressNextSync, err := r.getNetworkPolicyIngressRules(ctx, fqdnNetworkPolicy)
 	if err != nil {
 		return nil, err
 	}
+
 	// We sync just after the shortest TTL between ingress and egress rules
-	networkPolicy.Spec.Ingress = ingressRules
 	if ingressNextSync.Milliseconds() < nextSync.Milliseconds() {
 		nextSync = ingressNextSync
 	}
 
-	// creating NetworkPolicy if needed
-	if toCreate {
-		if err := r.Create(ctx, networkPolicy); err != nil {
-			log.Error(err, "unable to create NetworkPolicy")
-			return nil, err
+	networkPolicy.ObjectMeta.Name = fqdnNetworkPolicy.Name
+	networkPolicy.ObjectMeta.Namespace = fqdnNetworkPolicy.Namespace
+
+	res, err := controllerutil.CreateOrUpdate(ctx, r.Client, networkPolicy, func() error {
+		// Updating NetworkPolicy
+		if networkPolicy.Annotations == nil {
+			networkPolicy.Annotations = make(map[string]string)
 		}
-	}
-	// Updating the NetworkPolicy
-	if err := r.Update(ctx, networkPolicy); err != nil {
-		log.Error(err, "unable to update NetworkPolicy")
+		networkPolicy.Annotations[ownerAnnotation] = fqdnNetworkPolicy.Name
+		networkPolicy.Spec.PodSelector = fqdnNetworkPolicy.Spec.PodSelector
+		networkPolicy.Spec.PolicyTypes = fqdnNetworkPolicy.Spec.PolicyTypes
+		networkPolicy.Spec.Egress = egressRules
+		networkPolicy.Spec.Ingress = ingressRules
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 
+	log.Info(fmt.Sprintf("NetworkPolicy %s", res))
 	return nextSync, nil
 }
 
 // deleteNetworkPolicy deletes the NetworkPolicy associated with the fqdnNetworkPolicy FQDNNetworkPolicy
-func (r *FQDNNetworkPolicyReconciler) deleteNetworkPolicy(ctx context.Context,
-	fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) error {
+func (r *FQDNNetworkPolicyReconciler) deleteNetworkPolicy(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) error {
 	log := r.Log.WithValues("fqdnnetworkpolicy", fqdnNetworkPolicy.Namespace+"/"+fqdnNetworkPolicy.Name)
 
 	// Trying to fetch an existing NetworkPolicy of the same name as our FQDNNetworkPolicy
