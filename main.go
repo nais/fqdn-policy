@@ -23,6 +23,7 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 
 	networkingv1alpha3 "github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3"
 	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/controllers"
@@ -56,6 +57,7 @@ func main() {
 	var skipAAAA bool
 	var nextSyncPeriod int
 	var minimumSyncPeriod int
+	var maxConcurrentReconciles int
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -64,6 +66,7 @@ func main() {
 	flag.BoolVar(&skipAAAA, "skip-aaaa", false, "Skip AAAA lookups")
 	flag.IntVar(&nextSyncPeriod, "next-sync-period", 3600, "Highest value possible for the re-sync time on the FQDNNetworkPolicy, respecting the DNS TTL.")
 	flag.IntVar(&minimumSyncPeriod, "minimum-sync-period", 30, "Lowest value possible for the re-sync time on the FQDNNetworkPolicy, regardless of DNS TTL.")
+	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 10, "Maximum number of concurrent reconciles for the controller.")
 
 	opts := zap.Options{
 		Development: true,
@@ -77,6 +80,9 @@ func main() {
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
+		},
+		Controller: config.Controller{
+			MaxConcurrentReconciles: maxConcurrentReconciles,
 		},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
