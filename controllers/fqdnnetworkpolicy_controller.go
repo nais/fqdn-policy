@@ -162,15 +162,15 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	fqdnNetworkPolicy.Status.State = networkingv1alpha3.ActiveState
-	fqdnNetworkPolicy.Status.Reason = ""
-	nextSyncTime := metav1.NewTime(time.Now().Add(*nextSyncIn))
-	fqdnNetworkPolicy.Status.NextSyncTime = &nextSyncTime
+	if fqdnNetworkPolicy.Status.State != networkingv1alpha3.ActiveState || fqdnNetworkPolicy.Status.NextSyncTime != nil {
+		fqdnNetworkPolicy.Status.State = networkingv1alpha3.ActiveState
+		fqdnNetworkPolicy.Status.Reason = ""
+		fqdnNetworkPolicy.Status.NextSyncTime = nil
 
-	// Updating the status of our FQDNNetworkPolicy
-	if err := r.Status().Update(ctx, fqdnNetworkPolicy); err != nil {
-		log.Error(err, "unable to update FQDNNetworkPolicy status")
-		return ctrl.Result{}, err
+		if err := r.Status().Update(ctx, fqdnNetworkPolicy); err != nil {
+			log.Error(err, "unable to update FQDNNetworkPolicy status")
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{RequeueAfter: *nextSyncIn}, nil
