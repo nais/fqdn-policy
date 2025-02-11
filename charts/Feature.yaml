@@ -26,3 +26,7 @@ values:
     displayName: Memory request
     config:
       type: string
+  controllers.logLevel:
+    displayName: Log level
+    config:
+      type: string
