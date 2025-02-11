@@ -55,6 +55,7 @@ func main() {
 	var probeAddr string
 	var skipAAAA bool
 	var nextSyncPeriod int
+	var minimumSyncPeriod int
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -62,6 +63,7 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&skipAAAA, "skip-aaaa", false, "Skip AAAA lookups")
 	flag.IntVar(&nextSyncPeriod, "next-sync-period", 3600, "Highest value possible for the re-sync time on the FQDNNetworkPolicy, respecting the DNS TTL.")
+	flag.IntVar(&minimumSyncPeriod, "minimum-sync-period", 30, "Lowest value possible for the re-sync time on the FQDNNetworkPolicy, regardless of DNS TTL.")
 
 	opts := zap.Options{
 		Development: true,
@@ -100,8 +102,9 @@ func main() {
 	}
 
 	cfg := controllers.Config{
-		SkipAAAA:       skipAAAA,
-		NextSyncPeriod: nextSyncPeriod,
+		SkipAAAA:          skipAAAA,
+		NextSyncPeriod:    nextSyncPeriod,
+		MinimumSyncPeriod: minimumSyncPeriod,
 	}
 
 	if err = (&controllers.FQDNNetworkPolicyReconciler{

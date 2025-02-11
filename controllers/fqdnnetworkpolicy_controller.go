@@ -48,8 +48,9 @@ type FQDNNetworkPolicyReconciler struct {
 }
 
 type Config struct {
-	SkipAAAA       bool
-	NextSyncPeriod int
+	SkipAAAA          bool
+	NextSyncPeriod    int
+	MinimumSyncPeriod int
 }
 
 var (
@@ -411,6 +412,12 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 		})
 	}
 
+	minimumSync := uint32(r.Config.MinimumSyncPeriod)
+	if nextSync < minimumSync {
+		log.V(1).Info("Next sync is less than minimum sync period, waiting for minimum sync period")
+		nextSync = minimumSync
+	}
+
 	n := time.Second * time.Duration(nextSync)
 
 	return rules, &n, nil
@@ -539,6 +546,12 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 			Ports: frule.Ports,
 			To:    peers,
 		})
+	}
+
+	minimumSync := uint32(r.Config.MinimumSyncPeriod)
+	if nextSync < minimumSync {
+		log.V(1).Info("Next sync is less than minimum sync period, waiting for minimum sync period")
+		nextSync = minimumSync
 	}
 
 	n := time.Second * time.Duration(nextSync)
