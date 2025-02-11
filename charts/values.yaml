@@ -31,5 +31,5 @@ deploymentAnnotations: {}
 controller:
   logLevel: "error"
   nextSyncPeriod: 3600
-  minimumSyncPeriod: 30
-  maxConcurrentReconciles: 10
+  minimumSyncPeriod: 120
+  maxConcurrentReconciles: 100
