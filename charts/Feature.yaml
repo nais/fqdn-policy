@@ -30,3 +30,11 @@ values:
     displayName: Log level
     config:
       type: string
+  controller.maxConcurrentReconciles:
+    displayName: Maximum concurrent reconciles
+    config:
+      type: int
+  controller.minimumSyncPeriod:
+    displayName: Minimum sync period in seconds
+    config:
+      type: int
