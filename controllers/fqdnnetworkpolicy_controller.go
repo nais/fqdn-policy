@@ -134,6 +134,12 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, nil
 	}
 
+	if fqdnNetworkPolicy.Status.NextSyncTime != nil && fqdnNetworkPolicy.Status.NextSyncTime.After(time.Now()) {
+		log.V(1).Info("FQDNNetworkPolicy not due for resync")
+		nextSyncIn := fqdnNetworkPolicy.Status.NextSyncTime.Sub(time.Now())
+		return ctrl.Result{RequeueAfter: nextSyncIn}, nil
+	}
+
 	// Updating the NetworkPolicy associated with our FQDNNetworkPolicy
 	// nextSyncIn represents when we should check in again on that FQDNNetworkPolicy.
 	// It's probably related to the TTL of the DNS records.
@@ -150,7 +156,6 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 		return ctrl.Result{RequeueAfter: retry}, nil
 	}
-	log.Info("NetworkPolicy processed, next sync in " + fmt.Sprint(nextSyncIn))
 
 	// Need to fetch the object again before updating it
 	// as its status may have changed since the first time
@@ -254,7 +259,7 @@ func (r *FQDNNetworkPolicyReconciler) updateNetworkPolicy(ctx context.Context, f
 		return nil, err
 	}
 
-	log.Info(fmt.Sprintf("NetworkPolicy %s", res))
+	log.Info(fmt.Sprintf("NetworkPolicy %s, next sync in %s", res, nextSync))
 	return nextSync, nil
 }
 
