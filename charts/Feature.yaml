@@ -32,9 +32,11 @@ values:
       type: string
   controller.maxConcurrentReconciles:
     displayName: Maximum concurrent reconciles
+    description: Increase this value for clusters with large amounts of FQDNNetworkPolicies to ensure that they are processed in a timely manner.
     config:
       type: int
   controller.minimumSyncPeriod:
-    displayName: Minimum sync period in seconds
+    displayName: Minimum (re-)sync period in seconds
+    description: Increase this value for clusters with large amounts of FQDNNetworkPolicies and short TTLs for DNS records. A lower value results in more frequent reconciliations and resources waiting in queue due to backpressure.
     config:
       type: int
