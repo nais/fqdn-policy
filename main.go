@@ -76,7 +76,12 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	kcfg := ctrl.GetConfigOrDie()
+	// Disable client-side rate limiting and rely on "API Priority and Fairness" instead.
+	kcfg.QPS = -1
+	kcfg.Burst = -1
+
+	mgr, err := ctrl.NewManager(kcfg, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
