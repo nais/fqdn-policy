@@ -81,17 +81,12 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	_ = log.FromContext(ctx)
 	log := r.Log.WithValues("fqdnnetworkpolicy", req.NamespacedName)
 
-	// TODO(user): your logic here
-	// retrieving the FQDNNetworkPolicy on which we are working
 	fqdnNetworkPolicy := &networkingv1alpha3.FQDNNetworkPolicy{}
 	if err := r.Get(ctx, client.ObjectKey{
 		Namespace: req.Namespace,
 		Name:      req.Name,
 	}, fqdnNetworkPolicy); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			// we'll ignore not-found errors, since they can't be fixed by an immediate
-			// requeue (we'll need to wait for a new notification), and we can get them
-			// on deleted requests.
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "unable to fetch FQDNNetworkPolicy")
@@ -134,12 +129,9 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, nil
 	}
 
-	// Updating the NetworkPolicy associated with our FQDNNetworkPolicy
-	// nextSyncIn represents when we should check in again on that FQDNNetworkPolicy.
-	// It's probably related to the TTL of the DNS records.
-	nextSyncIn, err := r.updateNetworkPolicy(ctx, fqdnNetworkPolicy)
+	result, err := r.createOrUpdateNetworkPolicy(ctx, fqdnNetworkPolicy)
 	if err != nil {
-		log.Error(err, "unable to update NetworkPolicy")
+		log.Error(err, "unable to create or update NetworkPolicy")
 		fqdnNetworkPolicy.Status.State = networkingv1alpha3.PendingState
 		fqdnNetworkPolicy.Status.Reason = err.Error()
 		n := metav1.NewTime(time.Now().Add(retry))
@@ -173,7 +165,7 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	return ctrl.Result{RequeueAfter: *nextSyncIn}, nil
+	return result, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -189,7 +181,7 @@ func (r *FQDNNetworkPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *FQDNNetworkPolicyReconciler) updateNetworkPolicy(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) (*time.Duration, error) {
+func (r *FQDNNetworkPolicyReconciler) createOrUpdateNetworkPolicy(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) (ctrl.Result, error) {
 	log := r.Log.WithValues("fqdnnetworkpolicy", fqdnNetworkPolicy.Namespace+"/"+fqdnNetworkPolicy.Name)
 	toCreate := false
 
@@ -204,7 +196,7 @@ func (r *FQDNNetworkPolicyReconciler) updateNetworkPolicy(ctx context.Context, f
 			log.V(1).Info("associated NetworkPolicy doesn't exist, creating it")
 			toCreate = true
 		} else {
-			return nil, err
+			return ctrl.Result{}, err
 		}
 	}
 	if !toCreate {
@@ -216,17 +208,35 @@ func (r *FQDNNetworkPolicyReconciler) updateNetworkPolicy(ctx context.Context, f
 	// This also means that you can have a FQDNNetworkPolicy "adopt" a NetworkPolicy of the
 	// same name by adding the correct annotation.
 	if !toCreate && networkPolicy.Annotations[ownerAnnotation] != fqdnNetworkPolicy.Name {
-		return nil, errors.New("NetworkPolicy missing owned-by annotation or owned by a different resource")
+		return ctrl.Result{}, errors.New("NetworkPolicy missing owned-by annotation or owned by a different resource")
 	}
 
 	egressRules, nextSync, err := r.getNetworkPolicyEgressRules(ctx, fqdnNetworkPolicy)
 	if err != nil {
-		return nil, err
+		return ctrl.Result{}, err
+	}
+
+	policyTypes := fqdnNetworkPolicy.Spec.PolicyTypes
+
+	// Prevent provisioning a policy that inadvertently blocks all egress traffic.
+	if len(egressRules) == 0 && slices.Contains(policyTypes, networking.PolicyTypeEgress) {
+		log.Info("No egress rules resolved, removing egress policy type")
+		policyTypes = slices.DeleteFunc(policyTypes, func(t networking.PolicyType) bool {
+			return t == networking.PolicyTypeEgress
+		})
 	}
 
 	ingressRules, ingressNextSync, err := r.getNetworkPolicyIngressRules(ctx, fqdnNetworkPolicy)
 	if err != nil {
-		return nil, err
+		return ctrl.Result{}, err
+	}
+
+	// Prevent provisioning a policy that inadvertently blocks all ingress traffic.
+	if len(ingressRules) == 0 && slices.Contains(policyTypes, networking.PolicyTypeIngress) {
+		log.Info("No ingress rules resolved, removing ingress policy type")
+		policyTypes = slices.DeleteFunc(policyTypes, func(t networking.PolicyType) bool {
+			return t == networking.PolicyTypeIngress
+		})
 	}
 
 	// We sync just after the shortest TTL between ingress and egress rules
@@ -238,23 +248,22 @@ func (r *FQDNNetworkPolicyReconciler) updateNetworkPolicy(ctx context.Context, f
 	networkPolicy.ObjectMeta.Namespace = fqdnNetworkPolicy.Namespace
 
 	res, err := controllerutil.CreateOrUpdate(ctx, r.Client, networkPolicy, func() error {
-		// Updating NetworkPolicy
 		if networkPolicy.Annotations == nil {
 			networkPolicy.Annotations = make(map[string]string)
 		}
 		networkPolicy.Annotations[ownerAnnotation] = fqdnNetworkPolicy.Name
 		networkPolicy.Spec.PodSelector = fqdnNetworkPolicy.Spec.PodSelector
-		networkPolicy.Spec.PolicyTypes = fqdnNetworkPolicy.Spec.PolicyTypes
+		networkPolicy.Spec.PolicyTypes = policyTypes
 		networkPolicy.Spec.Egress = egressRules
 		networkPolicy.Spec.Ingress = ingressRules
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return ctrl.Result{}, err
 	}
 
 	log.Info(fmt.Sprintf("NetworkPolicy %s, next sync in %s", res, nextSync))
-	return nextSync, nil
+	return ctrl.Result{RequeueAfter: *nextSync}, nil
 }
 
 // deleteNetworkPolicy deletes the NetworkPolicy associated with the fqdnNetworkPolicy FQDNNetworkPolicy
@@ -309,8 +318,6 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 	// TODO what should this be?
 	nextSync = uint32(r.Config.NextSyncPeriod)
 
-	// TODO what do we do if nothing resolves, or if the list is empty?
-	// What's the behavior of NetworkPolicies in that case?
 	for _, frule := range fir {
 		peers := make([]networking.NetworkPolicyPeer, 0)
 		for _, from := range frule.From {
@@ -439,8 +446,6 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 	// TODO what should this be?
 	nextSync = uint32(r.Config.NextSyncPeriod)
 
-	// TODO what do we do if nothing resolves, or if the list is empty?
-	// What's the behavior of NetworkPolicies in that case?
 	for _, frule := range fer {
 		peers := make([]networking.NetworkPolicyPeer, 0)
 		for _, to := range frule.To {
