@@ -296,7 +296,7 @@ func (r *FQDNNetworkPolicyReconciler) deleteNetworkPolicy(ctx context.Context, f
 func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) ([]networking.NetworkPolicyIngressRule, *time.Duration, error) {
 	log := r.Log.WithValues("fqdnnetworkpolicy", fqdnNetworkPolicy.Namespace+"/"+fqdnNetworkPolicy.Name)
 	fir := fqdnNetworkPolicy.Spec.Ingress
-	rules := []networking.NetworkPolicyIngressRule{}
+	rules := make([]networking.NetworkPolicyIngressRule, 0)
 
 	// getting the nameservers from the local /etc/resolv.conf
 	ns, err := getNameservers()
@@ -334,8 +334,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 				// timeout the next etc. So this is not too bad for now.
 				r, _, err := c.Exchange(m, "["+ns[0]+"]:53")
 				if err != nil {
-					log.Error(err, "unable to resolve "+f)
-					continue
+					return nil, nil, fmt.Errorf("unable to resolve A record for %s: %w", f, err)
 				}
 				if len(r.Answer) == 0 {
 					log.V(1).Info("could not find A record for " + f)
@@ -367,8 +366,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 				// timeout the next etc. So this is not too bad for now.
 				r6, _, err := c.Exchange(m6, "["+ns[0]+"]:53")
 				if err != nil {
-					log.Error(err, "unable to resolve "+f)
-					continue
+					return nil, nil, fmt.Errorf("unable to resolve AAAA record for %s: %w", f, err)
 				}
 				if len(r6.Answer) == 0 {
 					log.V(1).Info("could not find AAAA record for " + f)
@@ -428,7 +426,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) ([]networking.NetworkPolicyEgressRule, *time.Duration, error) {
 	log := r.Log.WithValues("fqdnnetworkpolicy", fqdnNetworkPolicy.Namespace+"/"+fqdnNetworkPolicy.Name)
 	fer := fqdnNetworkPolicy.Spec.Egress
-	rules := []networking.NetworkPolicyEgressRule{}
+	rules := make([]networking.NetworkPolicyEgressRule, 0)
 
 	// getting the nameservers from the local /etc/resolv.conf
 	ns, err := getNameservers()
@@ -466,8 +464,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 				// timeout the next etc. So this is not too bad for now.
 				e, _, err := c.Exchange(m, "["+ns[0]+"]:53")
 				if err != nil {
-					log.Error(err, "unable to resolve "+f)
-					continue
+					return nil, nil, fmt.Errorf("unable to resolve A record for %s: %w", f, err)
 				}
 				if len(e.Answer) == 0 {
 					log.V(1).Info("could not find A record for " + f)
@@ -502,8 +499,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 					// timeout the next etc. So this is not too bad for now.
 					r6, _, err := c.Exchange(m6, "["+ns[0]+"]:53")
 					if err != nil {
-						log.Error(err, "unable to resolve "+f)
-						continue
+						return nil, nil, fmt.Errorf("unable to resolve AAAA record for %s: %w", f, err)
 					}
 					if len(r6.Answer) == 0 {
 						log.V(1).Info("could not find AAAA record for " + f)
