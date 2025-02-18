@@ -43,8 +43,6 @@ func (r *FQDNNetworkPolicy) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-
 //+kubebuilder:webhook:path=/mutate-networking-gke-io-v1alpha3-fqdnnetworkpolicy,mutating=true,failurePolicy=fail,sideEffects=None,groups=networking.gke.io,resources=fqdnnetworkpolicies,verbs=create;update,versions=v1alpha3,name=mfqdnnetworkpolicy.kb.io,admissionReviewVersions=v1
 
 var _ webhook.CustomDefaulter = &FQDNNetworkPolicy{}
@@ -58,7 +56,6 @@ func (r *FQDNNetworkPolicy) Default(ctx context.Context, obj runtime.Object) err
 
 	fqdnnetworkpolicylog.Info("default", "name", policy.Name)
 
-	// TODO(user): fill in your defaulting logic.
 	for ie, rule := range policy.Spec.Egress {
 		if rule.Ports != nil {
 			for ip, port := range rule.Ports {
@@ -91,7 +88,6 @@ func (r *FQDNNetworkPolicy) Default(ctx context.Context, obj runtime.Object) err
 	return nil
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 //+kubebuilder:webhook:path=/validate-networking-gke-io-v1alpha3-fqdnnetworkpolicy,mutating=false,failurePolicy=fail,sideEffects=None,groups=networking.gke.io,resources=fqdnnetworkpolicies,verbs=create;update,versions=v1alpha3,name=vfqdnnetworkpolicy.kb.io,admissionReviewVersions=v1
 
 var _ webhook.CustomValidator = &FQDNNetworkPolicy{}
@@ -104,7 +100,6 @@ func (r *FQDNNetworkPolicy) ValidateCreate(ctx context.Context, obj runtime.Obje
 	}
 	fqdnnetworkpolicylog.Info("validate create", "name", policy.Name)
 
-	// TODO(user): fill in your validation logic upon object creation.
 	var allErrs field.ErrorList
 	allErrs = append(allErrs, policy.ValidatePorts()...)
 	allErrs = append(allErrs, policy.ValidateFQDNs()...)
@@ -125,7 +120,6 @@ func (r *FQDNNetworkPolicy) ValidateUpdate(ctx context.Context, oldObj, newObj r
 	}
 	fqdnnetworkpolicylog.Info("validate update", "name", policy.Name)
 
-	// TODO(user): fill in your validation logic upon object update.
 	var allErrs field.ErrorList
 	allErrs = append(allErrs, policy.ValidatePorts()...)
 	allErrs = append(allErrs, policy.ValidateFQDNs()...)
@@ -146,7 +140,6 @@ func (r *FQDNNetworkPolicy) ValidateDelete(ctx context.Context, obj runtime.Obje
 	}
 	fqdnnetworkpolicylog.Info("validate delete", "name", policy.Name)
 
-	// TODO(user): fill in your validation logic upon object deletion.
 	return nil, nil
 }
 
