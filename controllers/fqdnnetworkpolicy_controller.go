@@ -24,7 +24,6 @@ import (
 	"slices"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -58,8 +57,6 @@ var (
 	deletePolicyAnnotation = "fqdnnetworkpolicies.networking.gke.io/delete-policy"
 	aaaaLookupsAnnotation  = "fqdnnetworkpolicies.networking.gke.io/aaaa-lookups"
 	finalizerName          = "finalizer.fqdnnetworkpolicies.networking.gke.io"
-	// TODO make retry configurable
-	retry = time.Second * time.Duration(10)
 )
 
 //+kubebuilder:rbac:groups=networking.gke.io,resources=fqdnnetworkpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -134,13 +131,13 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		log.Error(err, "unable to create or update NetworkPolicy")
 		fqdnNetworkPolicy.Status.State = networkingv1alpha3.PendingState
 		fqdnNetworkPolicy.Status.Reason = err.Error()
-		n := metav1.NewTime(time.Now().Add(retry))
-		fqdnNetworkPolicy.Status.NextSyncTime = &n
+
 		if e := r.Status().Update(ctx, fqdnNetworkPolicy); e != nil {
 			log.Error(e, "unable to update FQDNNetworkPolicy status")
 			return ctrl.Result{}, e
 		}
-		return ctrl.Result{RequeueAfter: retry}, nil
+
+		return ctrl.Result{}, err
 	}
 
 	// Need to fetch the object again before updating it
