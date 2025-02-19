@@ -17,25 +17,22 @@ limitations under the License.
 package controllers
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"slices"
 	"time"
 
+	networkingv1alpha3 "github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3"
+	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/internal/dns"
+	"github.com/go-logr/logr"
+	networking "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
-	networkingv1alpha3 "github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3"
-	"github.com/go-logr/logr"
-
-	"github.com/miekg/dns"
-	networking "k8s.io/api/networking/v1"
 )
 
 // FQDNNetworkPolicyReconciler reconciles a FQDNNetworkPolicy object
@@ -64,9 +61,10 @@ var (
 // +kubebuilder:rbac:groups=networking.gke.io,resources=fqdnnetworkpolicies/finalizers,verbs=update
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies/status,verbs=get;update;patch
+
 func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
 	log := r.Log.WithValues("fqdnnetworkpolicy", req.NamespacedName)
+	ctrllog.IntoContext(ctx, log)
 
 	fqdnNetworkPolicy := &networkingv1alpha3.FQDNNetworkPolicy{}
 	if err := r.Get(ctx, client.ObjectKey{
@@ -169,7 +167,7 @@ func (r *FQDNNetworkPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *FQDNNetworkPolicyReconciler) createOrUpdateNetworkPolicy(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) (ctrl.Result, error) {
-	log := r.Log.WithValues("fqdnnetworkpolicy", fqdnNetworkPolicy.Namespace+"/"+fqdnNetworkPolicy.Name)
+	log := ctrllog.FromContext(ctx)
 	toCreate := false
 
 	// Trying to fetch an existing NetworkPolicy of the same name as our FQDNNetworkPolicy
@@ -255,7 +253,7 @@ func (r *FQDNNetworkPolicyReconciler) createOrUpdateNetworkPolicy(ctx context.Co
 
 // deleteNetworkPolicy deletes the NetworkPolicy associated with the fqdnNetworkPolicy FQDNNetworkPolicy
 func (r *FQDNNetworkPolicyReconciler) deleteNetworkPolicy(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) error {
-	log := r.Log.WithValues("fqdnnetworkpolicy", fqdnNetworkPolicy.Namespace+"/"+fqdnNetworkPolicy.Name)
+	log := ctrllog.FromContext(ctx)
 
 	// Trying to fetch an existing NetworkPolicy of the same name as our FQDNNetworkPolicy
 	networkPolicy := &networking.NetworkPolicy{}
@@ -290,117 +288,44 @@ func (r *FQDNNetworkPolicyReconciler) deleteNetworkPolicy(ctx context.Context, f
 // provided slice of FQDNNetworkPolicyIngressRules, also returns when the next sync should happen
 // based on the TTL of records
 func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) ([]networking.NetworkPolicyIngressRule, *time.Duration, error) {
-	log := r.Log.WithValues("fqdnnetworkpolicy", fqdnNetworkPolicy.Namespace+"/"+fqdnNetworkPolicy.Name)
-	fir := fqdnNetworkPolicy.Spec.Ingress
-	rules := make([]networking.NetworkPolicyIngressRule, 0)
+	log := ctrllog.FromContext(ctx)
 
-	// getting the nameservers from the local /etc/resolv.conf
-	ns, err := getNameservers()
+	c, err := dns.NewClient()
 	if err != nil {
-		log.Error(err, "unable to get nameservers")
+		log.Error(err, "creating dns client")
 		return nil, nil, err
 	}
+
 	var nextSync uint32
 	// Highest value possible for the resync time on the FQDNNetworkPolicy
 	// TODO what should this be?
 	nextSync = uint32(r.Config.NextSyncPeriod)
 
-	for _, frule := range fir {
-		peers := make([]networking.NetworkPolicyPeer, 0)
-		for _, from := range frule.From {
-			for _, fqdn := range from.FQDNs {
-				f := fqdn
-				// The FQDN in the DNS request needs to end by a dot
-				if l := fqdn[len(fqdn)-1]; l != '.' {
-					f = fqdn + "."
-				}
-				c := new(dns.Client)
-				c.SingleInflight = true
+	skipAAAA := fqdnNetworkPolicy.Annotations[aaaaLookupsAnnotation] == "skip" || r.Config.SkipAAAA
+	if skipAAAA {
+		log.V(1).Info("FQDNNetworkPolicy has AAAA lookups policy set to skip, not resolving AAAA records")
+	}
 
-				// A records
-				m := new(dns.Msg)
-				m.SetQuestion(f, dns.TypeA)
-
-				// TODO: We're always using the first nameserver. Should we do
-				// something different? Note from Jens:
-				// by default only if options rotate is set in resolv.conf
-				// they are rotated. Otherwise the first is used, after a (5s)
-				// timeout the next etc. So this is not too bad for now.
-				r, _, err := c.Exchange(m, "["+ns[0]+"]:53")
-				if err != nil {
-					return nil, nil, fmt.Errorf("unable to resolve A record for %s: %w", f, err)
-				}
-				if len(r.Answer) == 0 {
-					log.V(1).Info("could not find A record for " + f)
-				}
-				for _, ans := range r.Answer {
-					if t, ok := ans.(*dns.A); ok {
-						// Adding a peer per answer
-						peers = append(peers, networking.NetworkPolicyPeer{
-							IPBlock: &networking.IPBlock{CIDR: t.A.String() + "/32"}})
-						// We want the next sync for the FQDNNetworkPolicy to happen
-						// just after the TTL of the DNS record has expired.
-						// Because a single FQDNNetworkPolicy may have different DNS
-						// records with different TTLs, we pick the lowest one
-						// and resynchronise after that.
-						if ans.Header().Ttl < nextSync {
-							nextSync = ans.Header().Ttl
-						}
-					}
-				}
-
-				// AAAA records
-				m6 := new(dns.Msg)
-				m6.SetQuestion(f, dns.TypeAAAA)
-
-				// TODO: We're always using the first nameserver. Should we do
-				// something different? Note from Jens:
-				// by default only if options rotate is set in resolv.conf
-				// they are rotated. Otherwise the first is used, after a (5s)
-				// timeout the next etc. So this is not too bad for now.
-				r6, _, err := c.Exchange(m6, "["+ns[0]+"]:53")
-				if err != nil {
-					return nil, nil, fmt.Errorf("unable to resolve AAAA record for %s: %w", f, err)
-				}
-				if len(r6.Answer) == 0 {
-					log.V(1).Info("could not find AAAA record for " + f)
-				}
-				for _, ans := range r6.Answer {
-					if t, ok := ans.(*dns.AAAA); ok {
-						// Adding a peer per answer
-						peers = append(peers, networking.NetworkPolicyPeer{
-							IPBlock: &networking.IPBlock{CIDR: t.AAAA.String() + "/128"}})
-						// We want the next sync for the FQDNNetworkPolicy to happen
-						// just after the TTL of the DNS record has expired.
-						// Because a single FQDNNetworkPolicy may have different DNS
-						// records with different TTLs, we pick the lowest one
-						// and resynchronise after that.
-						if ans.Header().Ttl < nextSync {
-							nextSync = ans.Header().Ttl
-						}
-					}
-				}
-			}
+	rules := make([]networking.NetworkPolicyIngressRule, 0)
+	for _, rule := range fqdnNetworkPolicy.Spec.Ingress {
+		records, err := c.ResolveFQDNs(ctx, rule.From, skipAAAA)
+		if err != nil {
+			return nil, nil, err
 		}
 
-		if len(peers) == 0 {
-			// If no peers have been found (most likely because the provided
-			// FQDNs don't resolve to anything), then we don't create an ingress
-			// rule at all to fail close. If we create one with only a "ports"
-			// section, but no "to" section, we're failing open.
-			log.V(1).Info("No peers found, skipping ingress rule.")
+		if len(records) == 0 {
+			log.V(1).Info("No resolved records, skipping ingress rule.")
 			continue
 		}
 
-		// Sort peers to prevent unnecessary updates
-		slices.SortFunc(peers, func(a, b networking.NetworkPolicyPeer) int {
-			return cmp.Compare(a.IPBlock.CIDR, b.IPBlock.CIDR)
+		rules = append(rules, networking.NetworkPolicyIngressRule{
+			Ports: rule.Ports,
+			From:  records.AsNetworkPolicyPeers(),
 		})
 
-		rules = append(rules, networking.NetworkPolicyIngressRule{
-			Ports: frule.Ports,
-			From:  peers,
-		})
+		if ttl, ok := records.LowestTTL(); ok && ttl < nextSync {
+			nextSync = ttl
+		}
 	}
 
 	minimumSync := uint32(r.Config.MinimumSyncPeriod)
@@ -418,121 +343,44 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 // provided slice of FQDNNetworkPolicyEgressRules, also returns when the next sync should happen
 // based on the TTL of records
 func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) ([]networking.NetworkPolicyEgressRule, *time.Duration, error) {
-	log := r.Log.WithValues("fqdnnetworkpolicy", fqdnNetworkPolicy.Namespace+"/"+fqdnNetworkPolicy.Name)
-	fer := fqdnNetworkPolicy.Spec.Egress
-	rules := make([]networking.NetworkPolicyEgressRule, 0)
+	log := ctrllog.FromContext(ctx)
 
-	// getting the nameservers from the local /etc/resolv.conf
-	ns, err := getNameservers()
+	c, err := dns.NewClient()
 	if err != nil {
-		log.Error(err, "unable to get nameservers")
+		log.Error(err, "creating dns client")
 		return nil, nil, err
 	}
+
 	var nextSync uint32
 	// Highest value possible for the resync time on the FQDNNetworkPolicy
 	// TODO what should this be?
 	nextSync = uint32(r.Config.NextSyncPeriod)
 
-	for _, frule := range fer {
-		peers := make([]networking.NetworkPolicyPeer, 0)
-		for _, to := range frule.To {
-			for _, fqdn := range to.FQDNs {
-				f := fqdn
-				// The FQDN in the DNS request needs to end by a dot
-				if l := fqdn[len(fqdn)-1]; l != '.' {
-					f = fqdn + "."
-				}
-				c := new(dns.Client)
-				c.SingleInflight = true
+	skipAAAA := fqdnNetworkPolicy.Annotations[aaaaLookupsAnnotation] == "skip" || r.Config.SkipAAAA
+	if skipAAAA {
+		log.V(1).Info("FQDNNetworkPolicy has AAAA lookups policy set to skip, not resolving AAAA records")
+	}
 
-				// A records
-				m := new(dns.Msg)
-				m.SetQuestion(f, dns.TypeA)
-
-				// TODO: We're always using the first nameserver. Should we do
-				// something different? Note from Jens:
-				// by default only if options rotate is set in resolv.conf
-				// they are rotated. Otherwise the first is used, after a (5s)
-				// timeout the next etc. So this is not too bad for now.
-				e, _, err := c.Exchange(m, "["+ns[0]+"]:53")
-				if err != nil {
-					return nil, nil, fmt.Errorf("unable to resolve A record for %s: %w", f, err)
-				}
-				if len(e.Answer) == 0 {
-					log.V(1).Info("could not find A record for " + f)
-				}
-				for _, ans := range e.Answer {
-					if t, ok := ans.(*dns.A); ok {
-						// Adding a peer per answer
-						peers = append(peers, networking.NetworkPolicyPeer{
-							IPBlock: &networking.IPBlock{CIDR: t.A.String() + "/32"}})
-						// We want the next sync for the FQDNNetworkPolicy to happen
-						// just after the TTL of the DNS record has expired.
-						// Because a single FQDNNetworkPolicy may have different DNS
-						// records with different TTLs, we pick the lowest one
-						// and resynchronise after that.
-						if ans.Header().Ttl < nextSync {
-							nextSync = ans.Header().Ttl
-						}
-					}
-				}
-				// check for AAAA lookups skip annotation
-				if fqdnNetworkPolicy.Annotations[aaaaLookupsAnnotation] == "skip" || r.Config.SkipAAAA {
-					log.V(1).Info("FQDNNetworkPolicy has AAAA lookups policy set to skip, not resolving AAAA records")
-				} else {
-					// AAAA records
-					m6 := new(dns.Msg)
-					m6.SetQuestion(f, dns.TypeAAAA)
-
-					// TODO: We're always using the first nameserver. Should we do
-					// something different? Note from Jens:
-					// by default only if options rotate is set in resolv.conf
-					// they are rotated. Otherwise the first is used, after a (5s)
-					// timeout the next etc. So this is not too bad for now.
-					r6, _, err := c.Exchange(m6, "["+ns[0]+"]:53")
-					if err != nil {
-						return nil, nil, fmt.Errorf("unable to resolve AAAA record for %s: %w", f, err)
-					}
-					if len(r6.Answer) == 0 {
-						log.V(1).Info("could not find AAAA record for " + f)
-					}
-					for _, ans := range r6.Answer {
-						if t, ok := ans.(*dns.AAAA); ok {
-							// Adding a peer per answer
-							peers = append(peers, networking.NetworkPolicyPeer{
-								IPBlock: &networking.IPBlock{CIDR: t.AAAA.String() + "/128"}})
-							// We want the next sync for the FQDNNetworkPolicy to happen
-							// just after the TTL of the DNS record has expired.
-							// Because a single FQDNNetworkPolicy may have different DNS
-							// records with different TTLs, we pick the lowest one
-							// and resynchronise after that.
-							if ans.Header().Ttl < nextSync {
-								nextSync = ans.Header().Ttl
-							}
-						}
-					}
-				}
-			}
+	rules := make([]networking.NetworkPolicyEgressRule, 0)
+	for _, rule := range fqdnNetworkPolicy.Spec.Egress {
+		records, err := c.ResolveFQDNs(ctx, rule.To, skipAAAA)
+		if err != nil {
+			return nil, nil, err
 		}
 
-		if len(peers) == 0 {
-			// If no peers have been found (most likely because the provided
-			// FQDNs don't resolve to anything), then we don't create an egress
-			// rule at all to fail close. If we create one with only a "ports"
-			// section, but no "to" section, we're failing open.
-			log.V(1).Info("No peers found, skipping egress rule.")
+		if len(records) == 0 {
+			log.V(1).Info("No resolved records, skipping egress rule.")
 			continue
 		}
 
-		// Sort peers to prevent unnecessary updates
-		slices.SortFunc(peers, func(a, b networking.NetworkPolicyPeer) int {
-			return cmp.Compare(a.IPBlock.CIDR, b.IPBlock.CIDR)
+		rules = append(rules, networking.NetworkPolicyEgressRule{
+			Ports: rule.Ports,
+			To:    records.AsNetworkPolicyPeers(),
 		})
 
-		rules = append(rules, networking.NetworkPolicyEgressRule{
-			Ports: frule.Ports,
-			To:    peers,
-		})
+		if ttl, ok := records.LowestTTL(); ok && ttl < nextSync {
+			nextSync = ttl
+		}
 	}
 
 	minimumSync := uint32(r.Config.MinimumSyncPeriod)
