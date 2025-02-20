@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -50,10 +49,9 @@ type Config struct {
 }
 
 var (
-	ownerAnnotation        = "fqdnnetworkpolicies.networking.gke.io/owned-by"
-	deletePolicyAnnotation = "fqdnnetworkpolicies.networking.gke.io/delete-policy"
-	aaaaLookupsAnnotation  = "fqdnnetworkpolicies.networking.gke.io/aaaa-lookups"
-	finalizerName          = "finalizer.fqdnnetworkpolicies.networking.gke.io"
+	aaaaLookupsAnnotation = "fqdnnetworkpolicies.networking.gke.io/aaaa-lookups"
+	// Deprecated
+	finalizerName = "finalizer.fqdnnetworkpolicies.networking.gke.io"
 )
 
 // +kubebuilder:rbac:groups=networking.gke.io,resources=fqdnnetworkpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -78,38 +76,15 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	if fqdnNetworkPolicy.ObjectMeta.DeletionTimestamp.IsZero() {
-		// Our FQDNNetworkPolicy is not being deleted
-		// If it doesn't already have our finalizer set, we set it
-		if !containsString(fqdnNetworkPolicy.GetFinalizers(), finalizerName) {
-			fqdnNetworkPolicy.SetFinalizers(append(fqdnNetworkPolicy.GetFinalizers(), finalizerName))
-			if err := r.Update(context.Background(), fqdnNetworkPolicy); err != nil {
-				return ctrl.Result{}, err
-			}
+	// Check and remove finalizer from legacy resources that still have them
+	if controllerutil.ContainsFinalizer(fqdnNetworkPolicy, finalizerName) {
+		controllerutil.RemoveFinalizer(fqdnNetworkPolicy, finalizerName)
+		if err := r.Update(ctx, fqdnNetworkPolicy); err != nil {
+			return ctrl.Result{}, err
 		}
-	} else {
-		// Our FQDNNetworkPolicy is being deleted
-		fqdnNetworkPolicy.Status.State = networkingv1alpha3.DestroyingState
-		fqdnNetworkPolicy.Status.Reason = "Deleting NetworkPolicy"
-		if e := r.Update(ctx, fqdnNetworkPolicy); e != nil {
-			log.Error(e, "unable to update FQDNNetworkPolicy status")
-			return ctrl.Result{}, e
-		}
+	}
 
-		if containsString(fqdnNetworkPolicy.GetFinalizers(), finalizerName) {
-			// Our finalizer is set, so we need to delete the associated NetworkPolicy
-			if err := r.deleteNetworkPolicy(ctx, fqdnNetworkPolicy); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			// deletion of the NetworkPolicy went well, we remove the finalizer from the list
-			fqdnNetworkPolicy.SetFinalizers(removeString(fqdnNetworkPolicy.GetFinalizers(), finalizerName))
-			fqdnNetworkPolicy.Status.Reason = "NetworkPolicy deleted or abandonned"
-			if err := r.Update(context.Background(), fqdnNetworkPolicy); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-
+	if !fqdnNetworkPolicy.GetObjectMeta().GetDeletionTimestamp().IsZero() {
 		// Stop reconciliation as the item is being deleted
 		return ctrl.Result{}, nil
 	}
@@ -168,7 +143,6 @@ func (r *FQDNNetworkPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *FQDNNetworkPolicyReconciler) createOrUpdateNetworkPolicy(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
-	toCreate := false
 
 	// Trying to fetch an existing NetworkPolicy of the same name as our FQDNNetworkPolicy
 	networkPolicy := &networking.NetworkPolicy{}
@@ -179,21 +153,11 @@ func (r *FQDNNetworkPolicyReconciler) createOrUpdateNetworkPolicy(ctx context.Co
 		if client.IgnoreNotFound(err) == nil {
 			// If there is none, that's OK, it means that we just haven't created it yet
 			log.V(1).Info("associated NetworkPolicy doesn't exist, creating it")
-			toCreate = true
 		} else {
 			return ctrl.Result{}, err
 		}
-	}
-	if !toCreate {
+	} else {
 		log.V(2).Info("Found NetworkPolicy")
-	}
-
-	// If we have found a NetworkPolicy, but it doesn't have the right annotation
-	// it means that it was created manually beforehand, and we don't want to touch it.
-	// This also means that you can have a FQDNNetworkPolicy "adopt" a NetworkPolicy of the
-	// same name by adding the correct annotation.
-	if !toCreate && networkPolicy.Annotations[ownerAnnotation] != fqdnNetworkPolicy.Name {
-		return ctrl.Result{}, errors.New("NetworkPolicy missing owned-by annotation or owned by a different resource")
 	}
 
 	egressRules, nextSync, err := r.getNetworkPolicyEgressRules(ctx, fqdnNetworkPolicy)
@@ -236,12 +200,11 @@ func (r *FQDNNetworkPolicyReconciler) createOrUpdateNetworkPolicy(ctx context.Co
 		if networkPolicy.Annotations == nil {
 			networkPolicy.Annotations = make(map[string]string)
 		}
-		networkPolicy.Annotations[ownerAnnotation] = fqdnNetworkPolicy.Name
 		networkPolicy.Spec.PodSelector = fqdnNetworkPolicy.Spec.PodSelector
 		networkPolicy.Spec.PolicyTypes = policyTypes
 		networkPolicy.Spec.Egress = egressRules
 		networkPolicy.Spec.Ingress = ingressRules
-		return nil
+		return controllerutil.SetControllerReference(fqdnNetworkPolicy, networkPolicy, r.Scheme)
 	})
 	if err != nil {
 		return ctrl.Result{}, err
@@ -249,39 +212,6 @@ func (r *FQDNNetworkPolicyReconciler) createOrUpdateNetworkPolicy(ctx context.Co
 
 	log.Info(fmt.Sprintf("NetworkPolicy %s, next sync in %s", res, nextSync))
 	return ctrl.Result{RequeueAfter: *nextSync}, nil
-}
-
-// deleteNetworkPolicy deletes the NetworkPolicy associated with the fqdnNetworkPolicy FQDNNetworkPolicy
-func (r *FQDNNetworkPolicyReconciler) deleteNetworkPolicy(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) error {
-	log := ctrllog.FromContext(ctx)
-
-	// Trying to fetch an existing NetworkPolicy of the same name as our FQDNNetworkPolicy
-	networkPolicy := &networking.NetworkPolicy{}
-	if err := r.Get(ctx, client.ObjectKey{
-		Namespace: fqdnNetworkPolicy.Namespace,
-		Name:      fqdnNetworkPolicy.Name,
-	}, networkPolicy); err != nil {
-		if client.IgnoreNotFound(err) == nil {
-			// If there is none, that's weird, but that's what we want
-			log.Info("associated NetworkPolicy doesn't exist")
-			return nil
-		}
-		return err
-	}
-	if networkPolicy.Annotations[deletePolicyAnnotation] == "abandon" {
-		log.Info("NetworkPolicy has delete policy set to abandon, not deleting")
-		return nil
-	}
-	if networkPolicy.Annotations[ownerAnnotation] != fqdnNetworkPolicy.Name {
-		log.Info("NetworkPolicy is not owned by FQDNNetworkPolicy, not deleting")
-		return nil
-	}
-	if err := r.Delete(ctx, networkPolicy); err != nil {
-		log.Error(err, "unable to delete the NetworkPolicy")
-		return err
-	}
-	log.Info("NetworkPolicy deleted")
-	return nil
 }
 
 // getNetworkPolicyIngressRules returns a slice of NetworkPolicyIngressRules based on the
