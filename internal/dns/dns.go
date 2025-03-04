@@ -1,16 +1,15 @@
 package dns
 
 import (
-	"bufio"
 	"cmp"
 	"context"
 	"fmt"
 	"os"
 	"slices"
-	"strings"
 
 	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3"
 	"github.com/miekg/dns"
+	"golang.org/x/sync/errgroup"
 	networking "k8s.io/api/networking/v1"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -18,7 +17,12 @@ import (
 type (
 	Client struct {
 		*dns.Client
-		nameservers []string
+		cfg *dns.ClientConfig
+	}
+
+	Config struct {
+		KubeServiceName string
+		ResolvConfPath  string
 	}
 
 	Record struct {
@@ -26,46 +30,55 @@ type (
 		TTL  uint32
 	}
 
+	Conns   []*dns.Conn
 	Records []Record
 )
 
-func NewClient() (*Client, error) {
-	nameservers, err := Nameservers()
+func NewClient(cfg Config) (*Client, error) {
+	c := new(dns.Client)
+
+	if len(cfg.KubeServiceName) == 0 {
+		cfg.KubeServiceName = "kube-dns"
+	}
+	if len(cfg.ResolvConfPath) == 0 {
+		cfg.ResolvConfPath = "/etc/resolv.conf"
+	}
+
+	dnscfg, err := dns.ClientConfigFromFile(cfg.ResolvConfPath)
 	if err != nil {
-		return nil, fmt.Errorf("getting nameservers: %w", err)
+		return nil, fmt.Errorf("parsing %s: %w", cfg.ResolvConfPath, err)
 	}
 
 	return &Client{
-		Client:      new(dns.Client),
-		nameservers: nameservers,
+		Client: c,
+		cfg:    dnscfg,
 	}, nil
 }
 
-func Nameservers() ([]string, error) {
-	f, err := os.Open("/etc/resolv.conf")
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
+func (c *Client) Connections(ctx context.Context) Conns {
+	log := ctrllog.FromContext(ctx)
+	conns := make(Conns, 0)
+	cfg := c.cfg
 
-	nameservers := make([]string, 0)
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "#") {
+	if isKubernetes() {
+		// Re-fetch the kube-dns service endpoints on every call to Connections
+		var err error
+		cfg, err = c.kubernetesConfig(ctx)
+		if err != nil {
+			log.Error(err, "resolving kube-dns service endpoints; continuing with default configuration")
+		}
+	}
+
+	for _, nameserver := range cfg.Servers {
+		conn, err := c.DialContext(ctx, nameserver+":"+cfg.Port)
+		if err != nil {
+			log.Error(err, "dialing "+nameserver)
 			continue
 		}
-
-		parts := strings.Split(line, " ")
-		if parts[0] != "nameserver" {
-			continue
-		}
-
-		n := strings.Join(parts[1:], "")
-		n = strings.TrimSpace(n)
-		nameservers = append(nameservers, n)
+		conns = append(conns, conn)
 	}
-	return nameservers, nil
+
+	return conns
 }
 
 func (c *Client) ResolveFQDNs(ctx context.Context, peers []v1alpha3.FQDNNetworkPolicyPeer, skipAAAA bool) (Records, error) {
@@ -94,12 +107,8 @@ func (c *Client) ResolveFQDNs(ctx context.Context, peers []v1alpha3.FQDNNetworkP
 }
 
 func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) (Records, error) {
-	f := fqdn
-	// The FQDN in the DNS request needs to end by a dot
-	if l := fqdn[len(fqdn)-1]; l != '.' {
-		f = fqdn + "."
-	}
-
+	log := ctrllog.FromContext(ctx)
+	f := dns.Fqdn(fqdn)
 	m := new(dns.Msg)
 	m.SetQuestion(f, questionType)
 
@@ -108,39 +117,60 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 		recordType = "AAAA"
 	}
 
-	// TODO: We're always using the first nameserver. Should we do
-	// something different? Note from Jens:
-	// by default only if options rotate is set in resolv.conf
-	// they are rotated. Otherwise the first is used, after a (5s)
-	// timeout the next etc. So this is not too bad for now.
-	e, _, err := c.ExchangeContext(ctx, m, "["+c.nameservers[0]+"]:53")
-	if err != nil {
-		return nil, fmt.Errorf("unable to resolve %s record for %s: %w", recordType, f, err)
-	}
-
-	if len(e.Answer) == 0 {
-		log := ctrllog.FromContext(ctx)
-		log.V(1).Info("could not find " + recordType + " record for " + f)
-	}
+	conns := c.Connections(ctx)
+	defer conns.Close()
 
 	records := make(Records, 0)
+	eg := new(errgroup.Group)
 
-	for _, ans := range e.Answer {
-		switch t := ans.(type) {
-		case *dns.A:
-			records = append(records, Record{
-				CIDR: t.A.String() + "/32",
-				TTL:  ans.Header().Ttl,
-			})
-		case *dns.AAAA:
-			records = append(records, Record{
-				CIDR: t.AAAA.String() + "/128",
-				TTL:  ans.Header().Ttl,
-			})
-		}
+	for _, conn := range conns {
+		eg.Go(func() error {
+			err := conn.WriteMsg(m)
+			if err != nil {
+				return fmt.Errorf("writing message: %w", err)
+			}
+
+			r, err := conn.ReadMsg()
+			if err != nil {
+				return fmt.Errorf("reading message: %w", err)
+			}
+
+			if len(r.Answer) == 0 {
+				log.V(1).Info("could not find " + recordType + " record for " + f)
+			}
+
+			for _, ans := range r.Answer {
+				switch t := ans.(type) {
+				case *dns.A:
+					records = append(records, Record{
+						CIDR: t.A.String() + "/32",
+						TTL:  ans.Header().Ttl,
+					})
+				case *dns.AAAA:
+					records = append(records, Record{
+						CIDR: t.AAAA.String() + "/128",
+						TTL:  ans.Header().Ttl,
+					})
+				}
+			}
+
+			return nil
+		})
+	}
+
+	err := eg.Wait()
+	if err != nil {
+		return nil, fmt.Errorf("resolving %s record for %s: %w", recordType, f, err)
 	}
 
 	return records, nil
+}
+
+func (c *Client) kubernetesConfig(ctx context.Context) (*dns.ClientConfig, error) {
+	cfg := c.cfg
+	// TODO: resolve pod ips from endpoints for kube-dns service and override cfg.Servers
+	// return default cfg if any error occurs
+	return cfg, nil
 }
 
 func (r Records) AsNetworkPolicyPeers() []networking.NetworkPolicyPeer {
@@ -179,4 +209,19 @@ func (r Records) LowestTTL() (uint32, bool) {
 	}
 
 	return lowest, true
+}
+
+func (c Conns) Close() error {
+	eg := new(errgroup.Group)
+	for _, conn := range c {
+		eg.Go(func() error {
+			return conn.Close()
+		})
+	}
+	return eg.Wait()
+}
+
+func isKubernetes() bool {
+	host, port := os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT")
+	return len(host) > 0 && len(port) > 0
 }

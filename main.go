@@ -20,6 +20,7 @@ import (
 	"flag"
 	"os"
 
+	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/internal/dns"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -58,6 +59,9 @@ func main() {
 	var nextSyncPeriod int
 	var minimumSyncPeriod int
 	var maxConcurrentReconciles int
+	var dnsConfigPath string
+	var dnsServiceName string
+
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -67,6 +71,8 @@ func main() {
 	flag.IntVar(&nextSyncPeriod, "next-sync-period", 3600, "Highest value possible for the re-sync time on the FQDNNetworkPolicy, respecting the DNS TTL.")
 	flag.IntVar(&minimumSyncPeriod, "minimum-sync-period", 30, "Lowest value possible for the re-sync time on the FQDNNetworkPolicy, regardless of DNS TTL.")
 	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 10, "Maximum number of concurrent reconciles for the controller.")
+	flag.StringVar(&dnsConfigPath, "dns-config-path", "/etc/resolv.conf", "Path to the DNS configuration file")
+	flag.StringVar(&dnsServiceName, "dns-service-name", "kube-dns", "Name of the cluster DNS service when using Kubernetes DNS")
 
 	opts := zap.Options{
 		Development: true,
@@ -116,6 +122,10 @@ func main() {
 		SkipAAAA:          skipAAAA,
 		NextSyncPeriod:    nextSyncPeriod,
 		MinimumSyncPeriod: minimumSyncPeriod,
+		DNSConfig: dns.Config{
+			KubeServiceName: dnsServiceName,
+			ResolvConfPath:  dnsConfigPath,
+		},
 	}
 
 	if err = (&controllers.FQDNNetworkPolicyReconciler{

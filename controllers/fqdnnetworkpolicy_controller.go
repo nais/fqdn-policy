@@ -46,6 +46,7 @@ type Config struct {
 	SkipAAAA          bool
 	NextSyncPeriod    int
 	MinimumSyncPeriod int
+	DNSConfig         dns.Config
 }
 
 var (
@@ -220,7 +221,7 @@ func (r *FQDNNetworkPolicyReconciler) createOrUpdateNetworkPolicy(ctx context.Co
 func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) ([]networking.NetworkPolicyIngressRule, *time.Duration, error) {
 	log := ctrllog.FromContext(ctx)
 
-	c, err := dns.NewClient()
+	c, err := dns.NewClient(r.Config.DNSConfig)
 	if err != nil {
 		log.Error(err, "creating dns client")
 		return nil, nil, err
@@ -275,7 +276,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) ([]networking.NetworkPolicyEgressRule, *time.Duration, error) {
 	log := ctrllog.FromContext(ctx)
 
-	c, err := dns.NewClient()
+	c, err := dns.NewClient(r.Config.DNSConfig)
 	if err != nil {
 		log.Error(err, "creating dns client")
 		return nil, nil, err
