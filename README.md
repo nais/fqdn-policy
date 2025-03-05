@@ -14,8 +14,8 @@ SBOM is generated with [cyclonedx](https://github.com/CycloneDX), image is signe
 You can validate the image attestations by executing the following commands:
 
 ```shell
-echo IDENTITY=https://github.com/nais/fqdn-policy/.github/workflows/main.yaml@refs/heads/main
-echo ISSUER=https://token.actions.githubusercontent.com
+IDENTITY=https://github.com/nais/fqdn-policy/.github/workflows/main.yaml@refs/heads/main
+ISSUER=https://token.actions.githubusercontent.com
 cosign verify-attestation --type=cyclonedx --certificate-oidc-issuer=$ISSUER --certificate-identity=$IDENTITY ghcr.io/nais/fqdn-policy@sha256:xxx
 ```
 
