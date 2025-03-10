@@ -66,30 +66,28 @@ func NewClient(ctx context.Context, k8sclient kubernetes.Interface) (*Client, er
 	}, nil
 }
 
-func (c *Client) Connections(ctx context.Context) Conns {
-	log := ctrllog.FromContext(ctx)
+func (c *Client) Connections(ctx context.Context) (Conns, error) {
 	conns := make(Conns, 0)
 	cfg := c.cfg
 
 	if isKubernetes() {
 		// Re-fetch the kube-dns service endpoints on every call to Connections
-		var err error
-		cfg, err = c.kubernetesConfig()
+		kcfg, err := c.kubernetesConfig()
 		if err != nil {
-			log.Error(err, "resolving kube-dns service endpoints; continuing with default configuration")
+			return nil, fmt.Errorf("resolving kube-dns service endpoints; continuing with default configuration: %w", err)
 		}
+		cfg = kcfg
 	}
 
 	for _, nameserver := range cfg.Servers {
 		conn, err := c.DialContext(ctx, nameserver+":"+cfg.Port)
 		if err != nil {
-			log.Error(err, "dialing "+nameserver)
-			continue
+			return conns, fmt.Errorf("dialing %s: %w", nameserver, err)
 		}
 		conns = append(conns, conn)
 	}
 
-	return conns
+	return conns, nil
 }
 
 func (c *Client) ResolveFQDNs(ctx context.Context, peers []v1alpha3.FQDNNetworkPolicyPeer, skipAAAA bool) (Records, error) {
@@ -128,8 +126,15 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 		recordType = "AAAA"
 	}
 
-	conns := c.Connections(ctx)
-	defer conns.Close()
+	conns, err := c.Connections(ctx)
+	defer func() {
+		if conns != nil {
+			_ = conns.Close()
+		}
+	}()
+	if err != nil {
+		return nil, err
+	}
 
 	records := make(Records, 0)
 	eg := new(errgroup.Group)
