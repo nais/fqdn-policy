@@ -28,6 +28,7 @@ jobs:
             ${{ steps.go-cache.outputs.gomodcache }}
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
       - run: make test
+      - run: make check
 
   dependabot_pr:
     runs-on: ubuntu-latest

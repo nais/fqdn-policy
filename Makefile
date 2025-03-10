@@ -154,6 +154,21 @@ deploy-cert-manager: ## Deploy cert-manager into the cluster.
 force-deploy-manager: docker-build kind-load-image deploy
 	kubectl -n fqdnnetworkpolicies-system delete pod -l control-plane=controller-manager
 
+.PHONY: check
+check: staticcheck deadcode vulncheck
+
+.PHONY: staticcheck
+staticcheck:
+	go tool honnef.co/go/tools/cmd/staticcheck ./...
+
+.PHONY: deadcode
+deadcode:
+	go tool golang.org/x/tools/cmd/deadcode -test ./...
+
+.PHONY: vulncheck
+vulncheck:
+	go tool golang.org/x/vuln/cmd/govulncheck ./...
+
 latest:
 	test ! -z ${VERSION}
 	echo ${VERSION} > fqdnnetworkpolicies-latest
