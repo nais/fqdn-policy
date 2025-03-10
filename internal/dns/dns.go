@@ -123,19 +123,19 @@ func (c *Client) ResolveFQDNs(ctx context.Context, peers []v1alpha3.FQDNNetworkP
 	return records, nil
 }
 
-func (c *Client) storeRecordsInCache(fqdn string, records Records) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	c.domainCache[fqdn] = records
-}
-
-func (c *Client) getRecordsFromCache(fqdn string) (Records, bool) {
+func (c *Client) getRecordsFromCache(fqdn, recordType string) (Records, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
-	records, ok := c.domainCache[fqdn]
+	records, ok := c.domainCache[fqdn+":"+recordType]
 	return records, ok
+}
+
+func (c *Client) storeRecordsInCache(fqdn, recordType string, records Records) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.domainCache[fqdn+":"+recordType] = records
 }
 
 func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) (Records, error) {
@@ -149,7 +149,7 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 		recordType = "AAAA"
 	}
 
-	cachedRecords, ok := c.getRecordsFromCache(fqdn)
+	cachedRecords, ok := c.getRecordsFromCache(fqdn, recordType)
 	if ok && !cachedRecords.HasExpired() {
 		return cachedRecords, nil
 	}
@@ -208,8 +208,11 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 	}
 
 	all := slices.Concat(liveRecords...)
+
+	// Inject cached records into the result to allow a grace period for applications with cached DNS records
 	for _, r := range cachedRecords {
 		if r.ExpiresAt.Before(time.Now()) {
+			// Skip expired records
 			continue
 		}
 
@@ -217,13 +220,14 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 			return a.IP.Equal(r.IP)
 		})
 		if contains {
+			// Skip duplicates
 			continue
 		}
 
 		all = append(all, r)
 	}
 
-	c.storeRecordsInCache(fqdn, all)
+	c.storeRecordsInCache(fqdn, recordType, all)
 
 	return all, nil
 }
