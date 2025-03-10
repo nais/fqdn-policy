@@ -209,8 +209,7 @@ func (r *FQDNNetworkPolicy) ValidateFQDNs() field.ErrorList {
 		if rule.To != nil {
 			for ito, to := range rule.To {
 				for ifqdn, fqdn := range to.FQDNs {
-					var p *idna.Profile
-					p = idna.New(idna.ValidateForRegistration())
+					p := idna.New(idna.ValidateForRegistration())
 					_, err := p.ToASCII(fqdn)
 					if err != nil {
 						allErrs = append(allErrs, field.Invalid(
@@ -226,8 +225,7 @@ func (r *FQDNNetworkPolicy) ValidateFQDNs() field.ErrorList {
 		if rule.From != nil {
 			for ifrom, from := range rule.From {
 				for ifqdn, fqdn := range from.FQDNs {
-					var p *idna.Profile
-					p = idna.New(idna.ValidateForRegistration())
+					p := idna.New(idna.ValidateForRegistration())
 					_, err := p.ToASCII(fqdn)
 					if err != nil {
 						allErrs = append(allErrs, field.Invalid(

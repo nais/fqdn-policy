@@ -17,8 +17,7 @@ limitations under the License.
 package v1alpha3
 
 import (
-	networking "k8s.io/api/networking/v1"
-	v1 "k8s.io/api/networking/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -44,7 +43,7 @@ type FQDNNetworkPolicySpec struct {
 	PodSelector metav1.LabelSelector           `json:"podSelector" protobuf:"bytes,1,opt,name=podSelector"`
 	Ingress     []FQDNNetworkPolicyIngressRule `json:"ingress,omitempty" protobuf:"bytes,2,rep,name=ingress"`
 	Egress      []FQDNNetworkPolicyEgressRule  `json:"egress,omitempty" protobuf:"bytes,3,rep,name=egress"`
-	PolicyTypes []v1.PolicyType                `json:"policyTypes,omitempty" protobuf:"bytes,4,rep,name=policyTypes,casttype=PolicyType"`
+	PolicyTypes []networkingv1.PolicyType      `json:"policyTypes,omitempty" protobuf:"bytes,4,rep,name=policyTypes,casttype=PolicyType"`
 }
 
 // FQDNNetworkPolicyStatus defines the observed state of FQDNNetworkPolicy
@@ -84,8 +83,8 @@ type FQDNNetworkPolicyList struct {
 // FQDNNetworkPolicySpec's podSelector. The traffic must match
 // both ports and to.
 type FQDNNetworkPolicyEgressRule struct {
-	Ports []networking.NetworkPolicyPort `json:"ports,omitempty"`
-	To    []FQDNNetworkPolicyPeer        `json:"to"`
+	Ports []networkingv1.NetworkPolicyPort `json:"ports,omitempty"`
+	To    []FQDNNetworkPolicyPeer          `json:"to"`
 }
 
 // FQDNNetworkPolicyIngressRule describes a particular set of
@@ -93,8 +92,8 @@ type FQDNNetworkPolicyEgressRule struct {
 // FQDNNetworkPolicySpec's podSelector. The traffic must match
 // both ports and from.
 type FQDNNetworkPolicyIngressRule struct {
-	Ports []networking.NetworkPolicyPort `json:"ports,omitempty"`
-	From  []FQDNNetworkPolicyPeer        `json:"from"`
+	Ports []networkingv1.NetworkPolicyPort `json:"ports,omitempty"`
+	From  []FQDNNetworkPolicyPeer          `json:"from"`
 }
 
 // FQDNNetworkPolicyPeer represents a FQDN that the
