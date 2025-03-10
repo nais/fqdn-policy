@@ -174,7 +174,7 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 		})
 	}
 
-	err := eg.Wait()
+	err = eg.Wait()
 	if err != nil {
 		return nil, fmt.Errorf("resolving %s record for %s: %w", recordType, f, err)
 	}
@@ -196,7 +196,14 @@ func (c *Client) kubernetesConfig() (*dns.ClientConfig, error) {
 	if err != nil {
 		return cfg, fmt.Errorf("fetching all endpoints: %w", err)
 	}
-	fmt.Printf("Endpoints: %+v", eps)
+	fmt.Println("#########################")
+	for _, endpoint := range eps {
+		fmt.Println(endpoint.Name)
+		for _, subset := range endpoint.Subsets {
+			fmt.Println(subset.Addresses)
+		}
+	}
+	fmt.Println("#########################")
 
 	ep, err := c.endpointLister.Endpoints("kube-system").Get("kube-dns")
 	if err != nil {
