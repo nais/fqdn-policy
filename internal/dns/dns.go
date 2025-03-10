@@ -12,7 +12,6 @@ import (
 	"github.com/miekg/dns"
 	"golang.org/x/sync/errgroup"
 	networking "k8s.io/api/networking/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	corelisterv1 "k8s.io/client-go/listers/core/v1"
@@ -40,7 +39,12 @@ func NewClient(ctx context.Context, k8sclient kubernetes.Interface) (*Client, er
 
 	var lister corelisterv1.EndpointsLister
 	if isKubernetes() {
-		inf := informers.NewSharedInformerFactoryWithOptions(k8sclient, 20*time.Minute, informers.WithNamespace("kube-system"))
+		inf := informers.NewSharedInformerFactoryWithOptions(
+			k8sclient,
+			20*time.Minute,
+			informers.WithNamespace("kube-system"),
+		)
+		lister = inf.Core().V1().Endpoints().Lister()
 		inf.Start(ctx.Done())
 		waitCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 		defer cancel()
@@ -51,7 +55,6 @@ func NewClient(ctx context.Context, k8sclient kubernetes.Interface) (*Client, er
 				return nil, fmt.Errorf("timed out waiting for caches to sync")
 			}
 		}
-		lister = inf.Core().V1().Endpoints().Lister()
 	}
 
 	dnscfg, err := dns.ClientConfigFromFile("/etc/resolv.conf")
@@ -191,19 +194,6 @@ func (c *Client) kubernetesConfig() (*dns.ClientConfig, error) {
 		Timeout:  c.cfg.Timeout,
 		Attempts: c.cfg.Attempts,
 	}
-
-	eps, err := c.endpointLister.Endpoints("").List(labels.Everything())
-	if err != nil {
-		return cfg, fmt.Errorf("fetching all endpoints: %w", err)
-	}
-	fmt.Println("#########################")
-	for _, endpoint := range eps {
-		fmt.Println(endpoint.Name)
-		for _, subset := range endpoint.Subsets {
-			fmt.Println(subset.Addresses)
-		}
-	}
-	fmt.Println("#########################")
 
 	ep, err := c.endpointLister.Endpoints("kube-system").Get("kube-dns")
 	if err != nil {
