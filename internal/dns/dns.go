@@ -4,8 +4,10 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3"
@@ -23,11 +25,13 @@ type (
 		*dns.Client
 		cfg            *dns.ClientConfig
 		endpointLister corelisterv1.EndpointsLister
+		lock           sync.RWMutex
+		domainCache    map[string]Records
 	}
 
 	Record struct {
-		CIDR string
-		TTL  uint32
+		IP        net.IP
+		ExpiresAt time.Time
 	}
 
 	Conns   []*dns.Conn
@@ -66,6 +70,7 @@ func NewClient(ctx context.Context, k8sclient kubernetes.Interface) (*Client, er
 		Client:         c,
 		cfg:            dnscfg,
 		endpointLister: lister,
+		domainCache:    make(map[string]Records),
 	}, nil
 }
 
@@ -118,6 +123,21 @@ func (c *Client) ResolveFQDNs(ctx context.Context, peers []v1alpha3.FQDNNetworkP
 	return records, nil
 }
 
+func (c *Client) storeRecordsInCache(fqdn string, records Records) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.domainCache[fqdn] = records
+}
+
+func (c *Client) getRecordsFromCache(fqdn string) (Records, bool) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	records, ok := c.domainCache[fqdn]
+	return records, ok
+}
+
 func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) (Records, error) {
 	log := ctrllog.FromContext(ctx)
 	f := dns.Fqdn(fqdn)
@@ -127,6 +147,12 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 	recordType := "A"
 	if questionType == dns.TypeAAAA {
 		recordType = "AAAA"
+	}
+
+	if records, ok := c.getRecordsFromCache(fqdn); ok {
+		if !records.HasExpired() {
+			return records, nil
+		}
 	}
 
 	conns, err := c.Connections(ctx)
@@ -158,16 +184,17 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 
 			records := make(Records, 0)
 			for _, ans := range r.Answer {
+				expiresAt := time.Now().Add(time.Second * time.Duration(ans.Header().Ttl))
 				switch t := ans.(type) {
 				case *dns.A:
 					records = append(records, Record{
-						CIDR: t.A.String() + "/32",
-						TTL:  ans.Header().Ttl,
+						IP:        t.A,
+						ExpiresAt: expiresAt,
 					})
 				case *dns.AAAA:
 					records = append(records, Record{
-						CIDR: t.AAAA.String() + "/128",
-						TTL:  ans.Header().Ttl,
+						IP:        t.AAAA,
+						ExpiresAt: expiresAt,
 					})
 				}
 			}
@@ -181,7 +208,10 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 		return nil, fmt.Errorf("resolving %s record for %s: %w", recordType, f, err)
 	}
 
-	return slices.Concat(records...), nil
+	all := slices.Concat(records...)
+	c.storeRecordsInCache(fqdn, all)
+
+	return all, nil
 }
 
 func (c *Client) kubernetesConfig() (*dns.ClientConfig, error) {
@@ -207,12 +237,20 @@ func (c *Client) kubernetesConfig() (*dns.ClientConfig, error) {
 	return cfg, nil
 }
 
+func (r *Record) cidr() string {
+	if len(r.IP) == net.IPv4len {
+		return "/32"
+	}
+
+	return "/128"
+}
+
 func (r Records) AsNetworkPolicyPeers() []networking.NetworkPolicyPeer {
 	peers := make([]networking.NetworkPolicyPeer, 0)
 	for _, record := range r {
 		peers = append(peers, networking.NetworkPolicyPeer{
 			IPBlock: &networking.IPBlock{
-				CIDR: record.CIDR,
+				CIDR: record.IP.String() + record.cidr(),
 			},
 		})
 	}
@@ -235,14 +273,23 @@ func (r Records) LowestTTL() (uint32, bool) {
 		return 0, false
 	}
 
-	lowest := r[0].TTL
+	lowest := r[0].ExpiresAt
 	for _, record := range r {
-		if record.TTL < lowest {
-			lowest = record.TTL
+		if record.ExpiresAt.Before(lowest) {
+			lowest = record.ExpiresAt
 		}
 	}
 
-	return lowest, true
+	return uint32(time.Until(lowest).Seconds()), true
+}
+
+func (r Records) HasExpired() bool {
+	for _, record := range r {
+		if time.Now().After(record.ExpiresAt) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c Conns) Close() error {
