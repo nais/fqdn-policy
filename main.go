@@ -68,7 +68,7 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&skipAAAA, "skip-aaaa", false, "Skip AAAA lookups")
 	flag.IntVar(&nextSyncPeriod, "next-sync-period", 3600, "Highest value possible for the re-sync time on the FQDNNetworkPolicy, respecting the DNS TTL.")
-	flag.IntVar(&minimumSyncPeriod, "minimum-sync-period", 30, "Lowest value possible for the re-sync time on the FQDNNetworkPolicy, regardless of DNS TTL.")
+	flag.IntVar(&minimumSyncPeriod, "minimum-sync-period", 10, "Lowest value possible for the re-sync time on the FQDNNetworkPolicy, regardless of DNS TTL.")
 	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 10, "Maximum number of concurrent reconciles for the controller.")
 
 	opts := zap.Options{
