@@ -35,11 +35,3 @@ rules:
     verbs:
       - create
       - patch
-  - apiGroups:
-      - ""
-    resources:
-      - endpoints
-    verbs:
-      - get
-      - list
-      - watch
