@@ -10,7 +10,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3"
 	"github.com/miekg/dns"
-	"golang.org/x/sync/errgroup"
+	"github.com/sourcegraph/conc/pool"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -139,25 +139,24 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 		return nil, err
 	}
 
-	records := make(Records, 0)
-	eg := new(errgroup.Group)
-
+	eg := pool.NewWithResults[Records]().WithContext(ctx).WithCancelOnError()
 	for _, conn := range conns {
-		eg.Go(func() error {
+		eg.Go(func(ctx context.Context) (Records, error) {
 			err := conn.WriteMsg(m)
 			if err != nil {
-				return fmt.Errorf("writing message: %w", err)
+				return nil, fmt.Errorf("writing message: %w", err)
 			}
 
 			r, err := conn.ReadMsg()
 			if err != nil {
-				return fmt.Errorf("reading message: %w", err)
+				return nil, fmt.Errorf("reading message: %w", err)
 			}
 
 			if len(r.Answer) == 0 {
 				log.V(1).Info("could not find " + recordType + " record for " + f)
 			}
 
+			records := make(Records, 0)
 			for _, ans := range r.Answer {
 				switch t := ans.(type) {
 				case *dns.A:
@@ -173,16 +172,16 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 				}
 			}
 
-			return nil
+			return records, nil
 		})
 	}
 
-	err = eg.Wait()
+	records, err := eg.Wait()
 	if err != nil {
 		return nil, fmt.Errorf("resolving %s record for %s: %w", recordType, f, err)
 	}
 
-	return records, nil
+	return slices.Concat(records...), nil
 }
 
 func (c *Client) kubernetesConfig() (*dns.ClientConfig, error) {
@@ -247,7 +246,7 @@ func (r Records) LowestTTL() (uint32, bool) {
 }
 
 func (c Conns) Close() error {
-	eg := new(errgroup.Group)
+	eg := pool.New().WithErrors()
 	for _, conn := range c {
 		eg.Go(func() error {
 			return conn.Close()
