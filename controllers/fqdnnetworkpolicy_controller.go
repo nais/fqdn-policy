@@ -37,16 +37,16 @@ import (
 // FQDNNetworkPolicyReconciler reconciles a FQDNNetworkPolicy object
 type FQDNNetworkPolicyReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
-	Config Config
+	Log       logr.Logger
+	Scheme    *runtime.Scheme
+	Config    Config
+	DNSClient *dns.Client
 }
 
 type Config struct {
 	SkipAAAA          bool
 	NextSyncPeriod    int
 	MinimumSyncPeriod int
-	DNSConfig         dns.Config
 }
 
 var (
@@ -221,12 +221,6 @@ func (r *FQDNNetworkPolicyReconciler) createOrUpdateNetworkPolicy(ctx context.Co
 func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) ([]networking.NetworkPolicyIngressRule, *time.Duration, error) {
 	log := ctrllog.FromContext(ctx)
 
-	c, err := dns.NewClient(r.Config.DNSConfig)
-	if err != nil {
-		log.Error(err, "creating dns client")
-		return nil, nil, err
-	}
-
 	var nextSync uint32
 	// Highest value possible for the resync time on the FQDNNetworkPolicy
 	// TODO what should this be?
@@ -239,7 +233,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 
 	rules := make([]networking.NetworkPolicyIngressRule, 0)
 	for _, rule := range fqdnNetworkPolicy.Spec.Ingress {
-		records, err := c.ResolveFQDNs(ctx, rule.From, skipAAAA)
+		records, err := r.DNSClient.ResolveFQDNs(ctx, rule.From, skipAAAA)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -276,12 +270,6 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) ([]networking.NetworkPolicyEgressRule, *time.Duration, error) {
 	log := ctrllog.FromContext(ctx)
 
-	c, err := dns.NewClient(r.Config.DNSConfig)
-	if err != nil {
-		log.Error(err, "creating dns client")
-		return nil, nil, err
-	}
-
 	var nextSync uint32
 	// Highest value possible for the resync time on the FQDNNetworkPolicy
 	// TODO what should this be?
@@ -294,7 +282,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 
 	rules := make([]networking.NetworkPolicyEgressRule, 0)
 	for _, rule := range fqdnNetworkPolicy.Spec.Egress {
-		records, err := c.ResolveFQDNs(ctx, rule.To, skipAAAA)
+		records, err := r.DNSClient.ResolveFQDNs(ctx, rule.To, skipAAAA)
 		if err != nil {
 			return nil, nil, err
 		}

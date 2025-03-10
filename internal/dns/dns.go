@@ -6,23 +6,23 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"time"
 
 	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3"
 	"github.com/miekg/dns"
 	"golang.org/x/sync/errgroup"
 	networking "k8s.io/api/networking/v1"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
+	corelisterv1 "k8s.io/client-go/listers/core/v1"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type (
 	Client struct {
 		*dns.Client
-		cfg *dns.ClientConfig
-	}
-
-	Config struct {
-		KubeServiceName string
-		ResolvConfPath  string
+		cfg            *dns.ClientConfig
+		endpointLister corelisterv1.EndpointsLister
 	}
 
 	Record struct {
@@ -34,24 +34,34 @@ type (
 	Records []Record
 )
 
-func NewClient(cfg Config) (*Client, error) {
+func NewClient(ctx context.Context, k8sclient kubernetes.Interface) (*Client, error) {
 	c := new(dns.Client)
 
-	if len(cfg.KubeServiceName) == 0 {
-		cfg.KubeServiceName = "kube-dns"
-	}
-	if len(cfg.ResolvConfPath) == 0 {
-		cfg.ResolvConfPath = "/etc/resolv.conf"
+	var lister corelisterv1.EndpointsLister
+	if isKubernetes() {
+		inf := informers.NewSharedInformerFactoryWithOptions(k8sclient, 20*time.Minute, informers.WithNamespace("kube-system"))
+		inf.Start(ctx.Done())
+		waitCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+
+		done := inf.WaitForCacheSync(waitCtx.Done())
+		for _, ok := range done {
+			if !ok {
+				return nil, fmt.Errorf("timed out waiting for caches to sync")
+			}
+		}
+		lister = inf.Core().V1().Endpoints().Lister()
 	}
 
-	dnscfg, err := dns.ClientConfigFromFile(cfg.ResolvConfPath)
+	dnscfg, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 	if err != nil {
-		return nil, fmt.Errorf("parsing %s: %w", cfg.ResolvConfPath, err)
+		return nil, fmt.Errorf("parsing /etc/resolv.conf: %w", err)
 	}
 
 	return &Client{
-		Client: c,
-		cfg:    dnscfg,
+		Client:         c,
+		cfg:            dnscfg,
+		endpointLister: lister,
 	}, nil
 }
 
@@ -63,7 +73,7 @@ func (c *Client) Connections(ctx context.Context) Conns {
 	if isKubernetes() {
 		// Re-fetch the kube-dns service endpoints on every call to Connections
 		var err error
-		cfg, err = c.kubernetesConfig(ctx)
+		cfg, err = c.kubernetesConfig()
 		if err != nil {
 			log.Error(err, "resolving kube-dns service endpoints; continuing with default configuration")
 		}
@@ -166,10 +176,26 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 	return records, nil
 }
 
-func (c *Client) kubernetesConfig(ctx context.Context) (*dns.ClientConfig, error) {
-	cfg := c.cfg
-	// TODO: resolve pod ips from endpoints for kube-dns service and override cfg.Servers
-	// return default cfg if any error occurs
+func (c *Client) kubernetesConfig() (*dns.ClientConfig, error) {
+	cfg := &dns.ClientConfig{
+		// Servers:  c.cfg.Servers[:],
+		Port:     c.cfg.Port,
+		Search:   c.cfg.Search[:],
+		Ndots:    c.cfg.Ndots,
+		Timeout:  c.cfg.Timeout,
+		Attempts: c.cfg.Attempts,
+	}
+
+	ep, err := c.endpointLister.Endpoints("kube-system").Get("kube-dns")
+	if err != nil {
+		return cfg, fmt.Errorf("fetching kube-dns service endpoints: %w", err)
+	}
+
+	for _, subset := range ep.Subsets {
+		for _, addr := range subset.Addresses {
+			cfg.Servers = append(cfg.Servers, addr.IP)
+		}
+	}
 	return cfg, nil
 }
 

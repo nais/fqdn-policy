@@ -23,6 +23,7 @@ import (
 	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/internal/dns"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 
@@ -59,8 +60,6 @@ func main() {
 	var nextSyncPeriod int
 	var minimumSyncPeriod int
 	var maxConcurrentReconciles int
-	var dnsConfigPath string
-	var dnsServiceName string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -71,8 +70,6 @@ func main() {
 	flag.IntVar(&nextSyncPeriod, "next-sync-period", 3600, "Highest value possible for the re-sync time on the FQDNNetworkPolicy, respecting the DNS TTL.")
 	flag.IntVar(&minimumSyncPeriod, "minimum-sync-period", 30, "Lowest value possible for the re-sync time on the FQDNNetworkPolicy, regardless of DNS TTL.")
 	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 10, "Maximum number of concurrent reconciles for the controller.")
-	flag.StringVar(&dnsConfigPath, "dns-config-path", "/etc/resolv.conf", "Path to the DNS configuration file")
-	flag.StringVar(&dnsServiceName, "dns-service-name", "kube-dns", "Name of the cluster DNS service when using Kubernetes DNS")
 
 	opts := zap.Options{
 		Development: true,
@@ -80,6 +77,7 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	ctx := ctrl.SetupSignalHandler()
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	kcfg := ctrl.GetConfigOrDie()
@@ -122,17 +120,26 @@ func main() {
 		SkipAAAA:          skipAAAA,
 		NextSyncPeriod:    nextSyncPeriod,
 		MinimumSyncPeriod: minimumSyncPeriod,
-		DNSConfig: dns.Config{
-			KubeServiceName: dnsServiceName,
-			ResolvConfPath:  dnsConfigPath,
-		},
+	}
+
+	kClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "creating kubernetes client")
+		os.Exit(1)
+	}
+
+	dnsClient, err := dns.NewClient(ctx, kClient)
+	if err != nil {
+		setupLog.Error(err, "creating dns client")
+		os.Exit(1)
 	}
 
 	if err = (&controllers.FQDNNetworkPolicyReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("FQDNNetworkPolicy"),
-		Scheme: mgr.GetScheme(),
-		Config: cfg,
+		Client:    mgr.GetClient(),
+		Log:       ctrl.Log.WithName("controllers").WithName("FQDNNetworkPolicy"),
+		Scheme:    mgr.GetScheme(),
+		Config:    cfg,
+		DNSClient: dnsClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "FQDNNetworkPolicy")
 		os.Exit(1)
@@ -153,7 +160,7 @@ func main() {
 	}
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
