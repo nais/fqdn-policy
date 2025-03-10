@@ -3,3 +3,4 @@ pin = true
 
 [tools]
 go = "1.24.1"
+helm = "3.17.1"
