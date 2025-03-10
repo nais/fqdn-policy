@@ -149,10 +149,9 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 		recordType = "AAAA"
 	}
 
-	if records, ok := c.getRecordsFromCache(fqdn); ok {
-		if !records.HasExpired() {
-			return records, nil
-		}
+	cachedRecords, ok := c.getRecordsFromCache(fqdn)
+	if ok && !cachedRecords.HasExpired() {
+		return cachedRecords, nil
 	}
 
 	conns, err := c.Connections(ctx)
@@ -203,12 +202,27 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 		})
 	}
 
-	records, err := eg.Wait()
+	liveRecords, err := eg.Wait()
 	if err != nil {
 		return nil, fmt.Errorf("resolving %s record for %s: %w", recordType, f, err)
 	}
 
-	all := slices.Concat(records...)
+	all := slices.Concat(liveRecords...)
+	for _, r := range cachedRecords {
+		if r.ExpiresAt.Before(time.Now()) {
+			continue
+		}
+
+		contains := slices.ContainsFunc(all, func(a Record) bool {
+			return a.IP.Equal(r.IP)
+		})
+		if contains {
+			continue
+		}
+
+		all = append(all, r)
+	}
+
 	c.storeRecordsInCache(fqdn, all)
 
 	return all, nil
