@@ -12,6 +12,7 @@ import (
 	"github.com/miekg/dns"
 	"golang.org/x/sync/errgroup"
 	networking "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	corelisterv1 "k8s.io/client-go/listers/core/v1"
@@ -185,6 +186,12 @@ func (c *Client) kubernetesConfig() (*dns.ClientConfig, error) {
 		Timeout:  c.cfg.Timeout,
 		Attempts: c.cfg.Attempts,
 	}
+
+	eps, err := c.endpointLister.Endpoints("").List(labels.Everything())
+	if err != nil {
+		return cfg, fmt.Errorf("fetching all endpoints: %w", err)
+	}
+	fmt.Printf("Endpoints: %+v", eps)
 
 	ep, err := c.endpointLister.Endpoints("kube-system").Get("kube-dns")
 	if err != nil {
