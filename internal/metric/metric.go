@@ -5,14 +5,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-var (
-	DNSResolveCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "domain_lookup_count",
-			Help: "Number of DNS lookups performed",
-		},
-		[]string{"source", "domain", "record_type"},
-	)
+var DNSResolveCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "domain_lookup_count",
+		Help: "Number of DNS lookups performed",
+	},
+	[]string{"source", "domain", "record_type"},
 )
 
 func init() {
