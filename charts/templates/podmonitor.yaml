@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: "{{ .Release.Name }}"
+  labels:
+    control-plane: controller-manager
+    {{- include "fqdn-policy.labels" . | nindent 4 }}
+spec:
+  podMetricsEndpoints:
+    - interval: 10s
+      port: metrics
+      scrapeTimeout: 5s
+  namespaceSelector:
+    matchNames:
+      - nais-system
+  selector:
+    matchLabels:
+      {{- include "fqdn-policy.selectorLabels" . | nindent 6 }}
