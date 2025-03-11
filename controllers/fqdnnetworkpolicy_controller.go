@@ -135,11 +135,11 @@ func (r *FQDNNetworkPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	mgr.GetFieldIndexer()
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&networkingv1alpha3.FQDNNetworkPolicy{}).
-			WithEventFilter(predicate.Or(
-				predicate.GenerationChangedPredicate{},
-				predicate.AnnotationChangedPredicate{},
-				predicate.LabelChangedPredicate{},
-			)).
+		WithEventFilter(predicate.Or(
+			predicate.GenerationChangedPredicate{},
+			predicate.AnnotationChangedPredicate{},
+			predicate.LabelChangedPredicate{},
+		)).
 		Complete(r)
 }
 
