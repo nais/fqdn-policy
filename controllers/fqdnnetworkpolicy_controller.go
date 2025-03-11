@@ -51,7 +51,8 @@ type Config struct {
 
 var (
 	aaaaLookupsAnnotation = "fqdnnetworkpolicies.networking.gke.io/aaaa-lookups"
-	// Deprecated
+	// finalizerName is kept for legacy purposes.
+	// It shouldn't be used other than for removal from existing FQDNNetworkPolicy resources.
 	finalizerName = "finalizer.fqdnnetworkpolicies.networking.gke.io"
 )
 
@@ -134,11 +135,11 @@ func (r *FQDNNetworkPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	mgr.GetFieldIndexer()
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&networkingv1alpha3.FQDNNetworkPolicy{}).
-		WithEventFilter(predicate.Or(
-			predicate.GenerationChangedPredicate{},
-			predicate.AnnotationChangedPredicate{},
-			predicate.LabelChangedPredicate{},
-		)).
+			WithEventFilter(predicate.Or(
+				predicate.GenerationChangedPredicate{},
+				predicate.AnnotationChangedPredicate{},
+				predicate.LabelChangedPredicate{},
+			)).
 		Complete(r)
 }
 
