@@ -17,7 +17,7 @@ podSecurityContext:
   seccompProfile:
     type: RuntimeDefault
 
-replicas: 1
+replicas: 2
 
 resources:
   limits:
