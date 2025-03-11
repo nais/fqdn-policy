@@ -21,7 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"testing"
+	"slices"
 	"time"
 
 	networkingv1alpha3 "github.com/nais/fqdn-policy/api/v1alpha3"
@@ -122,7 +122,7 @@ var _ = Describe("FQDNNetworkPolicy controller", func() {
 						total += len(egressRule.To)
 						for _, to := range egressRule.To {
 							// removing the /32 at the end of the CIDR
-							if !containsString(expectedIPs, string(to.IPBlock.CIDR)) {
+							if !slices.Contains(expectedIPs, to.IPBlock.CIDR) {
 								return errors.New("Unexpected IP in NetworkPolicy: " + string(to.IPBlock.CIDR) +
 									". Expected IPs: " + fmt.Sprint(expectedIPs))
 							}
@@ -226,7 +226,7 @@ var _ = Describe("FQDNNetworkPolicy controller", func() {
 						total += len(ingressRule.From)
 						for _, from := range ingressRule.From {
 							// removing the /32 at the end of the CIDR
-							if !containsString(expectedIPs, string(from.IPBlock.CIDR)) {
+							if !slices.Contains(expectedIPs, from.IPBlock.CIDR) {
 								return errors.New("Unexpected IP in NetworkPolicy: " + string(from.IPBlock.CIDR) +
 									". Expected IPs: " + fmt.Sprint(expectedIPs))
 							}
@@ -347,7 +347,7 @@ var _ = Describe("FQDNNetworkPolicy controller", func() {
 						total += len(egressRule.To)
 						for _, to := range egressRule.To {
 							// removing the /32 at the end of the CIDR
-							if !containsString(expectedIPs, string(to.IPBlock.CIDR)) {
+							if !slices.Contains(expectedIPs, to.IPBlock.CIDR) {
 								return errors.New("Unexpected IP in NetworkPolicy: " + string(to.IPBlock.CIDR) +
 									". Expected IPs: " + fmt.Sprint(expectedIPs))
 							}
@@ -362,26 +362,6 @@ var _ = Describe("FQDNNetworkPolicy controller", func() {
 		})
 	})
 })
-
-func TestContainsString(t *testing.T) {
-	slice := []string{"foo"}
-	slice = append(slice, "bar")
-	if !containsString(slice, "foo") {
-		t.Error("can't find an existing string")
-	}
-	if containsString(slice, "random") {
-		t.Error("can find a non existing string")
-	}
-}
-
-func TestRemoveString(t *testing.T) {
-	slice := []string{"foo"}
-	slice = append(slice, "bar")
-	slice = removeString(slice, "foo")
-	if containsString(slice, "foo") {
-		t.Error("string hasn't been removed")
-	}
-}
 
 func getFQDNNetworkPolicy(name string, namespace string) networkingv1alpha3.FQDNNetworkPolicy {
 	fqdnNetworkPolicy := networkingv1alpha3.FQDNNetworkPolicy{}
