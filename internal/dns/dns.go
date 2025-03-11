@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3"
+	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/internal/metric"
 	"github.com/miekg/dns"
 	"github.com/sourcegraph/conc/pool"
 	networking "k8s.io/api/networking/v1"
@@ -151,6 +152,7 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 
 	cachedRecords, ok := c.getRecordsFromCache(fqdn, recordType)
 	if ok && !cachedRecords.HasExpired() {
+		metrics.DNSResolveCounter.WithLabelValues("cached", fqdn, recordType).Inc()
 		return cachedRecords, nil
 	}
 
@@ -210,6 +212,7 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 	all := slices.Concat(liveRecords...)
 
 	// Inject cached records into the result to allow a grace period for applications with cached DNS records
+	source := "fresh"
 	for _, r := range cachedRecords {
 		if r.ExpiresAt.Before(time.Now()) {
 			// Skip expired records
@@ -224,8 +227,11 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 			continue
 		}
 
+		source = "combined"
 		all = append(all, r)
 	}
+
+	metrics.DNSResolveCounter.WithLabelValues(source, fqdn, recordType).Inc()
 
 	c.storeRecordsInCache(fqdn, recordType, all)
 
