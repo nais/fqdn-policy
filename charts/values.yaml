@@ -33,3 +33,6 @@ controller:
   nextSyncPeriod: 3600
   minimumSyncPeriod: 10
   maxConcurrentReconciles: 10
+
+alerts:
+  enabled: true
