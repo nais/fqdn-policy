@@ -2,7 +2,7 @@ domain: gke.io
 layout:
 - go.kubebuilder.io/v3
 projectName: gke-fqdnnetworkpolicies-golang
-repo: github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang
+repo: github.com/nais/fqdn-policy
 resources:
 - api:
     crdVersion: v1
@@ -11,7 +11,7 @@ resources:
   domain: gke.io
   group: networking
   kind: FQDNNetworkPolicy
-  path: github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3
+  path: github.com/nais/fqdn-policy/api/v1alpha3
   version: v1alpha3
   webhooks:
     defaulting: true

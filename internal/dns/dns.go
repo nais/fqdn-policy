@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3"
-	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/internal/metric"
 	"github.com/miekg/dns"
+	"github.com/nais/fqdn-policy/api/v1alpha3"
+	metrics "github.com/nais/fqdn-policy/internal/metric"
 	"github.com/sourcegraph/conc/pool"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/client-go/informers"

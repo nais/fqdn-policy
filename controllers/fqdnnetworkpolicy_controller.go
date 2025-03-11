@@ -22,9 +22,9 @@ import (
 	"slices"
 	"time"
 
-	networkingv1alpha3 "github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3"
-	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/internal/dns"
 	"github.com/go-logr/logr"
+	networkingv1alpha3 "github.com/nais/fqdn-policy/api/v1alpha3"
+	"github.com/nais/fqdn-policy/internal/dns"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"

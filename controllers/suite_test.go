@@ -36,18 +36,20 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	networkingv1alpha3 "github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3"
-	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/internal/dns"
+	networkingv1alpha3 "github.com/nais/fqdn-policy/api/v1alpha3"
+	"github.com/nais/fqdn-policy/internal/dns"
 	//+kubebuilder:scaffold:imports
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
-var cfg *rest.Config
-var k8sClient client.Client
-var testEnv *envtest.Environment
-var k8sManager manager.Manager
+var (
+	cfg        *rest.Config
+	k8sClient  client.Client
+	testEnv    *envtest.Environment
+	k8sManager manager.Manager
+)
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)

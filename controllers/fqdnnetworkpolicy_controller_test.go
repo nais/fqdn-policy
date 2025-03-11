@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	networkingv1alpha3 "github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/api/v1alpha3"
+	networkingv1alpha3 "github.com/nais/fqdn-policy/api/v1alpha3"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	v1 "k8s.io/api/core/v1"
