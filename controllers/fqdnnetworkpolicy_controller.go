@@ -25,6 +25,7 @@ import (
 	"github.com/go-logr/logr"
 	networkingv1alpha3 "github.com/nais/fqdn-policy/api/v1alpha3"
 	"github.com/nais/fqdn-policy/internal/dns"
+	metrics "github.com/nais/fqdn-policy/internal/metric"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -210,6 +211,7 @@ func (r *FQDNNetworkPolicyReconciler) createOrUpdateNetworkPolicy(ctx context.Co
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	metrics.NetworkPolicyResultCounter.WithLabelValues(string(res)).Inc()
 
 	log.Info(fmt.Sprintf("NetworkPolicy %s, next sync in %s", res, nextSync))
 	return ctrl.Result{RequeueAfter: *nextSync}, nil
