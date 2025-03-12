@@ -309,6 +309,9 @@ func (r Records) LowestTTL() (uint32, bool) {
 }
 
 func (r Records) HasExpired() bool {
+	if len(r) == 0 {
+		return true
+	}
 	for _, record := range r {
 		if time.Now().After(record.ExpiresAt) {
 			return true
