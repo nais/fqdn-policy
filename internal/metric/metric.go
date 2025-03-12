@@ -24,5 +24,8 @@ var (
 
 func init() {
 	// Register custom metrics with the global prometheus registry
-	metrics.Registry.MustRegister(DNSResolveCounter)
+	metrics.Registry.MustRegister(
+		DNSResolveCounter,
+		NetworkPolicyResultCounter,
+	)
 }
