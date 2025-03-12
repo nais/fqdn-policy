@@ -36,3 +36,9 @@ controller:
 
 alerts:
   enabled: true
+
+fasit:
+  tenant:
+    name: "unknown"
+  env:
+    name: "unknown"

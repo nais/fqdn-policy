@@ -19,4 +19,5 @@ spec:
           annotations:
             consequence: Network policy not updated.
             action: "Check logs in `{{"{{ $labels.namespace }}`/`{{ $labels.pod }}"}}`"
+            dashboard_url: "https://monitoring.nais.io/d/fefi4qz2462v4f/fqdn-policy-controller?var-tenant={{.Values.fasit.tenant.name }}&var-cluster={{ .Values.fasit.env.name }}"
 {{- end }}
