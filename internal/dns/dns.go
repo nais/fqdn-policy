@@ -214,7 +214,7 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 	// Inject cached records into the result to allow a grace period for applications with cached DNS records
 	source := "fresh"
 	for _, r := range cachedRecords {
-		isStale := time.Since(r.ExpiresAt) > 1*time.Hour
+		isStale := time.Since(r.ExpiresAt) > 5*time.Minute
 		if isStale {
 			// Skip expired records
 			continue
