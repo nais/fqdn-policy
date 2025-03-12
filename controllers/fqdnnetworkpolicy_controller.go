@@ -135,11 +135,11 @@ func (r *FQDNNetworkPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	mgr.GetFieldIndexer()
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&networkingv1alpha3.FQDNNetworkPolicy{}).
-		WithEventFilter(predicate.Or(
-			predicate.GenerationChangedPredicate{},
-			predicate.AnnotationChangedPredicate{},
-			predicate.LabelChangedPredicate{},
-		)).
+			WithEventFilter(predicate.Or(
+				predicate.GenerationChangedPredicate{},
+				predicate.AnnotationChangedPredicate{},
+				predicate.LabelChangedPredicate{},
+			)).
 		Complete(r)
 }
 
@@ -194,6 +194,10 @@ func (r *FQDNNetworkPolicyReconciler) createOrUpdateNetworkPolicy(ctx context.Co
 	if ingressNextSync.Milliseconds() < nextSync.Milliseconds() {
 		nextSync = ingressNextSync
 	}
+	// Check your bounds, yo
+	if nextSync <= 0 {
+		nextSync = time.Second
+	}
 
 	networkPolicy.ObjectMeta.Name = fqdnNetworkPolicy.Name
 	networkPolicy.ObjectMeta.Namespace = fqdnNetworkPolicy.Namespace
@@ -214,13 +218,13 @@ func (r *FQDNNetworkPolicyReconciler) createOrUpdateNetworkPolicy(ctx context.Co
 	metrics.NetworkPolicyResultCounter.WithLabelValues(string(res)).Inc()
 
 	log.Info(fmt.Sprintf("NetworkPolicy %s, next sync in %s", res, nextSync))
-	return ctrl.Result{RequeueAfter: *nextSync}, nil
+	return ctrl.Result{RequeueAfter: nextSync}, nil
 }
 
 // getNetworkPolicyIngressRules returns a slice of NetworkPolicyIngressRules based on the
 // provided slice of FQDNNetworkPolicyIngressRules, also returns when the next sync should happen
 // based on the TTL of records
-func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) ([]networking.NetworkPolicyIngressRule, *time.Duration, error) {
+func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) ([]networking.NetworkPolicyIngressRule, time.Duration, error) {
 	log := ctrllog.FromContext(ctx)
 
 	var nextSync uint32
@@ -236,7 +240,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 	for _, rule := range fqdnNetworkPolicy.Spec.Ingress {
 		records, err := r.DNSClient.ResolveFQDNs(ctx, rule.From, skipAAAA)
 		if err != nil {
-			return nil, nil, err
+			return nil, 0, err
 		}
 
 		if len(records) == 0 {
@@ -255,14 +259,13 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 	}
 
 	n := time.Second * time.Duration(nextSync)
-
-	return rules, &n, nil
+	return rules, n, nil
 }
 
 // getNetworkPolicyEgressRules returns a slice of NetworkPolicyEgressRules based on the
 // provided slice of FQDNNetworkPolicyEgressRules, also returns when the next sync should happen
 // based on the TTL of records
-func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) ([]networking.NetworkPolicyEgressRule, *time.Duration, error) {
+func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) ([]networking.NetworkPolicyEgressRule, time.Duration, error) {
 	log := ctrllog.FromContext(ctx)
 
 	var nextSync uint32
@@ -278,7 +281,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 	for _, rule := range fqdnNetworkPolicy.Spec.Egress {
 		records, err := r.DNSClient.ResolveFQDNs(ctx, rule.To, skipAAAA)
 		if err != nil {
-			return nil, nil, err
+			return nil, 0, err
 		}
 
 		if len(records) == 0 {
@@ -297,6 +300,5 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 	}
 
 	n := time.Second * time.Duration(nextSync)
-
-	return rules, &n, nil
+	return rules, n, nil
 }
