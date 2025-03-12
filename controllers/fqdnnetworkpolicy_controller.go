@@ -44,9 +44,8 @@ type FQDNNetworkPolicyReconciler struct {
 }
 
 type Config struct {
-	SkipAAAA          bool
-	NextSyncPeriod    int
-	MinimumSyncPeriod int
+	SkipAAAA       bool
+	NextSyncPeriod int
 }
 
 var (
@@ -224,7 +223,6 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 
 	var nextSync uint32
 	// Highest value possible for the resync time on the FQDNNetworkPolicy
-	// TODO what should this be?
 	nextSync = uint32(r.Config.NextSyncPeriod)
 
 	skipAAAA := fqdnNetworkPolicy.Annotations[aaaaLookupsAnnotation] == "skip" || r.Config.SkipAAAA
@@ -254,12 +252,6 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 		}
 	}
 
-	minimumSync := uint32(r.Config.MinimumSyncPeriod)
-	if nextSync < minimumSync {
-		log.V(1).Info("Next sync is less than minimum sync period, waiting for minimum sync period")
-		nextSync = minimumSync
-	}
-
 	n := time.Second * time.Duration(nextSync)
 
 	return rules, &n, nil
@@ -273,7 +265,6 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 
 	var nextSync uint32
 	// Highest value possible for the resync time on the FQDNNetworkPolicy
-	// TODO what should this be?
 	nextSync = uint32(r.Config.NextSyncPeriod)
 
 	skipAAAA := fqdnNetworkPolicy.Annotations[aaaaLookupsAnnotation] == "skip" || r.Config.SkipAAAA
@@ -301,12 +292,6 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 		if ttl, ok := records.LowestTTL(); ok && ttl < nextSync {
 			nextSync = ttl
 		}
-	}
-
-	minimumSync := uint32(r.Config.MinimumSyncPeriod)
-	if nextSync < minimumSync {
-		log.V(1).Info("Next sync is less than minimum sync period, waiting for minimum sync period")
-		nextSync = minimumSync
 	}
 
 	n := time.Second * time.Duration(nextSync)

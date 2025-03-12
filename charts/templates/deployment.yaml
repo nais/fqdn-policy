@@ -31,7 +31,6 @@ spec:
             - --zap-log-level={{ .Values.controller.logLevel }}
             - --skip-aaaa
             - --next-sync-period={{ .Values.controller.nextSyncPeriod }}
-            - --minimum-sync-period={{ .Values.controller.minimumSyncPeriod }}
             - --max-concurrent-reconciles={{ .Values.controller.maxConcurrentReconciles }}
           command:
             - /manager

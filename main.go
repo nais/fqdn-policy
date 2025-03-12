@@ -58,7 +58,6 @@ func main() {
 	var probeAddr string
 	var skipAAAA bool
 	var nextSyncPeriod int
-	var minimumSyncPeriod int
 	var maxConcurrentReconciles int
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -68,7 +67,6 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&skipAAAA, "skip-aaaa", false, "Skip AAAA lookups")
 	flag.IntVar(&nextSyncPeriod, "next-sync-period", 3600, "Highest value possible for the re-sync time on the FQDNNetworkPolicy, respecting the DNS TTL.")
-	flag.IntVar(&minimumSyncPeriod, "minimum-sync-period", 10, "Lowest value possible for the re-sync time on the FQDNNetworkPolicy, regardless of DNS TTL.")
 	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 10, "Maximum number of concurrent reconciles for the controller.")
 
 	opts := zap.Options{
@@ -117,9 +115,8 @@ func main() {
 	}
 
 	cfg := controllers.Config{
-		SkipAAAA:          skipAAAA,
-		NextSyncPeriod:    nextSyncPeriod,
-		MinimumSyncPeriod: minimumSyncPeriod,
+		SkipAAAA:       skipAAAA,
+		NextSyncPeriod: nextSyncPeriod,
 	}
 
 	kClient, err := kubernetes.NewForConfig(mgr.GetConfig())
