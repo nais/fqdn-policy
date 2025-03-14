@@ -24,7 +24,7 @@ import (
 type (
 	Client struct {
 		*dns.Client
-		cfg            *dns.ClientConfig
+		defaultCfg     *dns.ClientConfig
 		endpointLister corelisterv1.EndpointsLister
 		lock           sync.RWMutex
 		domainCache    map[string]Records
@@ -35,7 +35,6 @@ type (
 		ExpiresAt time.Time
 	}
 
-	Conns   []*dns.Conn
 	Records []Record
 )
 
@@ -69,34 +68,10 @@ func NewClient(ctx context.Context, k8sclient kubernetes.Interface) (*Client, er
 
 	return &Client{
 		Client:         c,
-		cfg:            dnscfg,
+		defaultCfg:     dnscfg,
 		endpointLister: lister,
 		domainCache:    make(map[string]Records),
 	}, nil
-}
-
-func (c *Client) Connections(ctx context.Context) (Conns, error) {
-	conns := make(Conns, 0)
-	cfg := c.cfg
-
-	if isKubernetes() {
-		// Re-fetch the kube-dns service endpoints on every call to Connections
-		kcfg, err := c.kubernetesConfig()
-		if err != nil {
-			return nil, fmt.Errorf("resolving kube-dns service endpoints; continuing with default configuration: %w", err)
-		}
-		cfg = kcfg
-	}
-
-	for _, nameserver := range cfg.Servers {
-		conn, err := c.DialContext(ctx, nameserver+":"+cfg.Port)
-		if err != nil {
-			return conns, fmt.Errorf("dialing %s: %w", nameserver, err)
-		}
-		conns = append(conns, conn)
-	}
-
-	return conns, nil
 }
 
 func (c *Client) ResolveFQDNs(ctx context.Context, peers []v1alpha3.FQDNNetworkPolicyPeer, skipAAAA bool) (Records, error) {
@@ -122,6 +97,41 @@ func (c *Client) ResolveFQDNs(ctx context.Context, peers []v1alpha3.FQDNNetworkP
 	}
 
 	return records, nil
+}
+
+func (c *Client) dnsAddresses() ([]string, error) {
+	ips := c.defaultCfg.Servers
+	port := c.defaultCfg.Port
+
+	if isKubernetes() {
+		var err error
+		ips, err = c.kubeDNSIPs()
+		if err != nil {
+			return nil, fmt.Errorf("resolving kube-dns service endpoints; continuing with default configuration: %w", err)
+		}
+		port = "53"
+	}
+
+	addrs := make([]string, 0, len(ips))
+	for _, ip := range ips {
+		addrs = append(addrs, ip+":"+port)
+	}
+	return addrs, nil
+}
+
+func (c *Client) kubeDNSIPs() ([]string, error) {
+	ep, err := c.endpointLister.Endpoints("kube-system").Get("kube-dns")
+	if err != nil {
+		return nil, fmt.Errorf("fetching kube-dns service endpoints: %w", err)
+	}
+
+	servers := make([]string, 0)
+	for _, subset := range ep.Subsets {
+		for _, addr := range subset.Addresses {
+			servers = append(servers, addr.IP)
+		}
+	}
+	return servers, nil
 }
 
 func (c *Client) getRecordsFromCache(fqdn, recordType string) (Records, bool) {
@@ -156,27 +166,21 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 		return cachedRecords, nil
 	}
 
-	conns, err := c.Connections(ctx)
-	defer func() {
-		if conns != nil {
-			_ = conns.Close()
-		}
-	}()
+	// Re-fetch the kube-dns service endpoints
+	addrs, err := c.dnsAddresses()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolving DNS addresses: %w", err)
 	}
 
-	eg := pool.NewWithResults[Records]().WithContext(ctx).WithCancelOnError()
-	for _, conn := range conns {
-		eg.Go(func(ctx context.Context) (Records, error) {
-			err := conn.WriteMsg(m)
-			if err != nil {
-				return nil, fmt.Errorf("writing message: %w", err)
-			}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 
-			r, err := conn.ReadMsg()
+	eg := pool.NewWithResults[Records]().WithContext(ctx).WithCancelOnError()
+	for _, addr := range addrs {
+		eg.Go(func(ctx context.Context) (Records, error) {
+			r, _, err := c.ExchangeContext(ctx, m, addr)
 			if err != nil {
-				return nil, fmt.Errorf("reading message: %w", err)
+				return nil, err
 			}
 
 			if len(r.Answer) == 0 {
@@ -239,43 +243,20 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 	return all, nil
 }
 
-func (c *Client) kubernetesConfig() (*dns.ClientConfig, error) {
-	cfg := &dns.ClientConfig{
-		// Servers:  c.cfg.Servers[:],
-		Port:     c.cfg.Port,
-		Search:   c.cfg.Search[:],
-		Ndots:    c.cfg.Ndots,
-		Timeout:  c.cfg.Timeout,
-		Attempts: c.cfg.Attempts,
-	}
-
-	ep, err := c.endpointLister.Endpoints("kube-system").Get("kube-dns")
-	if err != nil {
-		return cfg, fmt.Errorf("fetching kube-dns service endpoints: %w", err)
-	}
-
-	for _, subset := range ep.Subsets {
-		for _, addr := range subset.Addresses {
-			cfg.Servers = append(cfg.Servers, addr.IP)
-		}
-	}
-	return cfg, nil
-}
-
-func (r *Record) cidr() string {
+func (r *Record) toCIDR() string {
 	if len(r.IP) == net.IPv4len {
-		return "/32"
+		return r.IP.String() + "/32"
 	}
 
-	return "/128"
+	return r.IP.String() + "/128"
 }
 
 func (r Records) AsNetworkPolicyPeers() []networking.NetworkPolicyPeer {
-	peers := make([]networking.NetworkPolicyPeer, 0)
+	peers := make([]networking.NetworkPolicyPeer, 0, len(r))
 	for _, record := range r {
 		peers = append(peers, networking.NetworkPolicyPeer{
 			IPBlock: &networking.IPBlock{
-				CIDR: record.IP.String() + record.cidr(),
+				CIDR: record.toCIDR(),
 			},
 		})
 	}
@@ -318,16 +299,6 @@ func (r Records) HasExpired() bool {
 		}
 	}
 	return false
-}
-
-func (c Conns) Close() error {
-	eg := pool.New().WithErrors()
-	for _, conn := range c {
-		eg.Go(func() error {
-			return conn.Close()
-		})
-	}
-	return eg.Wait()
 }
 
 func isKubernetes() bool {
