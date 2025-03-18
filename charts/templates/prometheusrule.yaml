@@ -11,15 +11,17 @@ spec:
     - name: "{{ .Release.Name }}-alerts"
       rules:
         - alert: FQDNNetworkPolicy reconciles failing
-          expr: increase(controller_runtime_reconcile_total{job="nais-system/{{ .Release.Name }}", result="error"}[2m]) > 0
-          for: 5m
+          expr: sum(rate(controller_runtime_reconcile_total{job="nais-system/{{ .Release.Name }}", result="error"}[2m])) by (pod, namespace) / sum(rate(controller_runtime_reconcile_total{job="nais-system/{{ .Release.Name }}"}[2m])) by (pod, namespace) > 0.5
+          for: 10m
           labels:
             namespace: nais-system
             severity: warning
           annotations:
-            summary: Controller has failed to reconcile FQDNNetworkPolicy resources over the last 5 minutes
-            consequence: Network policy not updated.
-            action: "Check dashboard and logs in `{{"{{ $labels.namespace }}`/`{{ $labels.pod }}"}}`"
+            summary: Controller has failed to reconcile over 50% of FQDNNetworkPolicy resources over the last 10 minutes
+            consequence: Network policies might not be updated.
+            action: |
+              Check dashboard and logs in `{{"{{ $labels.namespace }}`/`{{ $labels.pod }}"}}`
+              Verify kube-dns is up and running as well as connectivity to kube-dns pods.
             dashboard_url: "https://monitoring.nais.io/d/fefi4qz2462v4f/fqdn-policy-controller?var-tenant={{.Values.fasit.tenant.name }}&var-cluster={{ .Values.fasit.env.name }}"
         - alert: No reconciles of FQDNNetworkPolicy for over 15 minutes
           expr: sum(increase(controller_runtime_reconcile_total{job="nais-system/{{ .Release.Name }}"}[5m])) == 0
@@ -29,7 +31,8 @@ spec:
             severity: warning
           annotations:
             summary: Controller has not reconciled any FQDNNetworkPolicy resources over the last 15 minutes
-            consequence: Network policy not updated.
-            action: "Check dashboard and logs in `{{"{{ $labels.namespace }}`/`{{ $labels.pod }}"}}`"
+            consequence: Network policies might not be updated.
+            action: |
+              Check dashboard and logs in `{{"{{ $labels.namespace }}`/`{{ $labels.pod }}"}}`
             dashboard_url: "https://monitoring.nais.io/d/fefi4qz2462v4f/fqdn-policy-controller?var-tenant={{.Values.fasit.tenant.name }}&var-cluster={{ .Values.fasit.env.name }}"
 {{- end }}
