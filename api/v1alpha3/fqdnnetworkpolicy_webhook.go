@@ -43,8 +43,6 @@ func (r *FQDNNetworkPolicy) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-//+kubebuilder:webhook:path=/mutate-networking-gke-io-v1alpha3-fqdnnetworkpolicy,mutating=true,failurePolicy=fail,sideEffects=None,groups=networking.gke.io,resources=fqdnnetworkpolicies,verbs=create;update,versions=v1alpha3,name=mfqdnnetworkpolicy.kb.io,admissionReviewVersions=v1
-
 var _ webhook.CustomDefaulter = &FQDNNetworkPolicy{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
@@ -87,8 +85,6 @@ func (r *FQDNNetworkPolicy) Default(ctx context.Context, obj runtime.Object) err
 
 	return nil
 }
-
-//+kubebuilder:webhook:path=/validate-networking-gke-io-v1alpha3-fqdnnetworkpolicy,mutating=false,failurePolicy=fail,sideEffects=None,groups=networking.gke.io,resources=fqdnnetworkpolicies,verbs=create;update,versions=v1alpha3,name=vfqdnnetworkpolicy.kb.io,admissionReviewVersions=v1
 
 var _ webhook.CustomValidator = &FQDNNetworkPolicy{}
 

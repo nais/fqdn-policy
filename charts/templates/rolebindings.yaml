@@ -23,16 +23,3 @@ subjects:
 - kind: ServiceAccount
   name: fqdn-policy
   namespace: {{ .Release.Namespace }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: fqdnnetworkpolicies-proxy-rolebinding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: fqdnnetworkpolicies-proxy-role
-subjects:
-- kind: ServiceAccount
-  name: fqdn-policy
-  namespace: {{ .Release.Namespace }}

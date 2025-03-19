@@ -1,7 +1,0 @@
----
-apiVersion: v1
-data:
-  DEV_MODE: "false"
-kind: ConfigMap
-metadata:
-  name: fqdnnetworkpolicies-manager-config-f6mt7hh26c

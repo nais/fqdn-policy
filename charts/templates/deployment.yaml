@@ -34,12 +34,6 @@ spec:
             - --max-concurrent-reconciles={{ .Values.controller.maxConcurrentReconciles }}
           command:
             - /manager
-          env:
-            - name: DEV_MODE
-              valueFrom:
-                configMapKeyRef:
-                  key: DEV_MODE
-                  name: fqdnnetworkpolicies-manager-config-f6mt7hh26c
           image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
           name: manager
           ports:
