@@ -1,6 +1,7 @@
 module github.com/nais/fqdn-policy
 
 go 1.24.0
+
 tool (
 	golang.org/x/tools/cmd/deadcode
 	golang.org/x/vuln/cmd/govulncheck
@@ -10,9 +11,9 @@ tool (
 
 require (
 	github.com/go-logr/logr v1.4.2
-	github.com/miekg/dns v1.1.63
-	github.com/onsi/ginkgo/v2 v2.23.0
-	github.com/onsi/gomega v1.36.2
+	github.com/miekg/dns v1.1.64
+	github.com/onsi/ginkgo/v2 v2.23.3
+	github.com/onsi/gomega v1.36.3
 	github.com/prometheus/client_golang v1.21.1
 	github.com/sourcegraph/conc v0.3.0
 	golang.org/x/net v0.37.0
