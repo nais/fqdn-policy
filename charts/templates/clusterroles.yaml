@@ -51,10 +51,10 @@ rules:
   - patch
   - update
 - apiGroups:
-  - ""
+    - discovery.k8s.io
   resources:
-  - endpoints
+    - endpointslices
   verbs:
-  - get
-  - list
-  - watch
+    - get
+    - list
+    - watch

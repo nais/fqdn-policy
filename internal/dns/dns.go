@@ -15,9 +15,10 @@ import (
 	metrics "github.com/nais/fqdn-policy/internal/metric"
 	"github.com/sourcegraph/conc/pool"
 	networking "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	corelisterv1 "k8s.io/client-go/listers/core/v1"
+	discoverylisterv1 "k8s.io/client-go/listers/discovery/v1"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -25,7 +26,7 @@ type (
 	Client struct {
 		*dns.Client
 		defaultCfg     *dns.ClientConfig
-		endpointLister corelisterv1.EndpointsLister
+		endpointLister discoverylisterv1.EndpointSliceLister
 		lock           sync.RWMutex
 		domainCache    map[string]Records
 	}
@@ -41,14 +42,14 @@ type (
 func NewClient(ctx context.Context, k8sclient kubernetes.Interface) (*Client, error) {
 	c := new(dns.Client)
 
-	var lister corelisterv1.EndpointsLister
+	var lister discoverylisterv1.EndpointSliceLister
 	if isKubernetes() {
 		inf := informers.NewSharedInformerFactoryWithOptions(
 			k8sclient,
 			20*time.Minute,
 			informers.WithNamespace("kube-system"),
 		)
-		lister = inf.Core().V1().Endpoints().Lister()
+		lister = inf.Discovery().V1().EndpointSlices().Lister()
 		inf.Start(ctx.Done())
 		waitCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 		defer cancel()
@@ -99,13 +100,13 @@ func (c *Client) ResolveFQDNs(ctx context.Context, peers []v1alpha3.FQDNNetworkP
 	return records, nil
 }
 
-func (c *Client) dnsAddresses() ([]string, error) {
+func (c *Client) dnsAddresses(ctx context.Context) ([]string, error) {
 	ips := c.defaultCfg.Servers
 	port := c.defaultCfg.Port
 
 	if isKubernetes() {
 		var err error
-		ips, err = c.kubeDNSIPs()
+		ips, err = c.kubeDNSIPs(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("resolving kube-dns service endpoints; continuing with default configuration: %w", err)
 		}
@@ -119,18 +120,36 @@ func (c *Client) dnsAddresses() ([]string, error) {
 	return addrs, nil
 }
 
-func (c *Client) kubeDNSIPs() ([]string, error) {
-	ep, err := c.endpointLister.Endpoints("kube-system").Get("kube-dns")
+func (c *Client) kubeDNSIPs(ctx context.Context) ([]string, error) {
+	selector := labels.Set{
+		"k8s-app": "kube-dns",
+	}.AsSelector()
+	epSlices, err := c.endpointLister.
+		EndpointSlices("kube-system").
+		List(selector)
 	if err != nil {
 		return nil, fmt.Errorf("fetching kube-dns service endpoints: %w", err)
 	}
 
 	servers := make([]string, 0)
-	for _, subset := range ep.Subsets {
-		for _, addr := range subset.Addresses {
-			servers = append(servers, addr.IP)
+
+	for _, epSlice := range epSlices {
+		for _, ep := range epSlice.Endpoints {
+			if ep.Conditions.Ready == nil || !*ep.Conditions.Ready {
+				continue
+			}
+			if ep.Conditions.Terminating != nil && *ep.Conditions.Terminating {
+				continue
+			}
+			for _, addr := range ep.Addresses {
+				servers = append(servers, addr)
+			}
 		}
 	}
+	if len(servers) == 0 {
+		ctrllog.FromContext(ctx).V(1).Info("no kube-dns service endpoints found; using default DNS configuration")
+	}
+
 	return servers, nil
 }
 
@@ -167,7 +186,7 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 	}
 
 	// Re-fetch the kube-dns service endpoints
-	addrs, err := c.dnsAddresses()
+	addrs, err := c.dnsAddresses(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolving DNS addresses: %w", err)
 	}
