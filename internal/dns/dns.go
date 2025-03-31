@@ -141,9 +141,7 @@ func (c *Client) kubeDNSIPs(ctx context.Context) ([]string, error) {
 			if ep.Conditions.Terminating != nil && *ep.Conditions.Terminating {
 				continue
 			}
-			for _, addr := range ep.Addresses {
-				servers = append(servers, addr)
-			}
+			servers = append(servers, ep.Addresses...)
 		}
 	}
 	if len(servers) == 0 {
