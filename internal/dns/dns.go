@@ -100,15 +100,15 @@ func (c *Client) ResolveFQDNs(ctx context.Context, peers []v1alpha3.FQDNNetworkP
 	return records, nil
 }
 
-func (c *Client) dnsAddresses(ctx context.Context) ([]string, error) {
+func (c *Client) dnsAddresses() ([]string, error) {
 	ips := c.defaultCfg.Servers
 	port := c.defaultCfg.Port
 
 	if isKubernetes() {
 		var err error
-		ips, err = c.kubeDNSIPs(ctx)
+		ips, err = c.kubeDNSIPs()
 		if err != nil {
-			return nil, fmt.Errorf("resolving kube-dns service endpoints; continuing with default configuration: %w", err)
+			return nil, fmt.Errorf("resolving kube-dns service endpoints: %w", err)
 		}
 		port = "53"
 	}
@@ -120,7 +120,7 @@ func (c *Client) dnsAddresses(ctx context.Context) ([]string, error) {
 	return addrs, nil
 }
 
-func (c *Client) kubeDNSIPs(ctx context.Context) ([]string, error) {
+func (c *Client) kubeDNSIPs() ([]string, error) {
 	selector := labels.Set{
 		"k8s-app": "kube-dns",
 	}.AsSelector()
@@ -128,7 +128,7 @@ func (c *Client) kubeDNSIPs(ctx context.Context) ([]string, error) {
 		EndpointSlices("kube-system").
 		List(selector)
 	if err != nil {
-		return nil, fmt.Errorf("fetching kube-dns service endpoints: %w", err)
+		return nil, fmt.Errorf("listing endpoint slices: %w", err)
 	}
 
 	servers := make([]string, 0)
@@ -145,7 +145,7 @@ func (c *Client) kubeDNSIPs(ctx context.Context) ([]string, error) {
 		}
 	}
 	if len(servers) == 0 {
-		ctrllog.FromContext(ctx).V(1).Info("no kube-dns service endpoints found; using default DNS configuration")
+		return nil, fmt.Errorf("no ready endpoints found")
 	}
 
 	return servers, nil
@@ -184,7 +184,7 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 	}
 
 	// Re-fetch the kube-dns service endpoints
-	addrs, err := c.dnsAddresses(ctx)
+	addrs, err := c.dnsAddresses()
 	if err != nil {
 		return nil, fmt.Errorf("resolving DNS addresses: %w", err)
 	}
