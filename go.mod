@@ -1,6 +1,6 @@
 module github.com/nais/fqdn-policy
 
-go 1.24.0
+go 1.24.2
 
 tool (
 	golang.org/x/tools/cmd/deadcode
