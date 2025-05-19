@@ -17,9 +17,9 @@ require (
 	github.com/prometheus/client_golang v1.22.0
 	github.com/sourcegraph/conc v0.3.0
 	golang.org/x/net v0.40.0
-	k8s.io/api v0.33.0
-	k8s.io/apimachinery v0.33.0
-	k8s.io/client-go v0.33.0
+	k8s.io/api v0.33.1
+	k8s.io/apimachinery v0.33.1
+	k8s.io/client-go v0.33.1
 	sigs.k8s.io/controller-runtime v0.20.4
 	sigs.k8s.io/yaml v1.4.0
 )
