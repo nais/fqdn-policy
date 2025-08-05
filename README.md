@@ -87,8 +87,18 @@ This uses TLS SNI instead of DNS resolution to determine the destination, which 
 
 ## Installation
 
+Locally
+
 ```shell
 helm install fqdn-policy ./charts
+```
+
+From repository
+```
+helm install fqdn-policy oci://europe-north1-docker.pkg.dev/nais-io/nais/feature/fqdn-policy \
+    --namespace fqdn-policy \
+    --create-namespace \
+    --version <chart-version>
 ```
 
 ## Development
