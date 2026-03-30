@@ -18,17 +18,14 @@ package v1alpha3
 
 import (
 	"context"
-	"fmt"
 
 	"golang.org/x/net/idna"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -36,22 +33,16 @@ import (
 var fqdnnetworkpolicylog = logf.Log.WithName("fqdnnetworkpolicy-resource")
 
 func (r *FQDNNetworkPolicy) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(r).
-		WithDefaulter(r).
-		WithValidator(r).
+	return ctrl.NewWebhookManagedBy(mgr, r).
+		WithDefaulter(&FQDNNetworkPolicy{}).
+		WithValidator(&FQDNNetworkPolicy{}).
 		Complete()
 }
 
-var _ webhook.CustomDefaulter = &FQDNNetworkPolicy{}
+var _ admission.Defaulter[*FQDNNetworkPolicy] = &FQDNNetworkPolicy{}
 
-// Default implements webhook.Defaulter so a webhook will be registered for the type
-func (r *FQDNNetworkPolicy) Default(ctx context.Context, obj runtime.Object) error {
-	policy, ok := obj.(*FQDNNetworkPolicy)
-	if !ok {
-		return fmt.Errorf("expected an FQDNNetworkPolicy but got a %T", obj)
-	}
-
+// Default implements admission.Defaulter so a webhook will be registered for the type
+func (r *FQDNNetworkPolicy) Default(ctx context.Context, policy *FQDNNetworkPolicy) error {
 	fqdnnetworkpolicylog.Info("default", "name", policy.Name)
 
 	for ie, rule := range policy.Spec.Egress {
@@ -86,14 +77,10 @@ func (r *FQDNNetworkPolicy) Default(ctx context.Context, obj runtime.Object) err
 	return nil
 }
 
-var _ webhook.CustomValidator = &FQDNNetworkPolicy{}
+var _ admission.Validator[*FQDNNetworkPolicy] = &FQDNNetworkPolicy{}
 
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *FQDNNetworkPolicy) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	policy, ok := obj.(*FQDNNetworkPolicy)
-	if !ok {
-		return nil, fmt.Errorf("expected an FQDNNetworkPolicy but got a %T", obj)
-	}
+// ValidateCreate implements admission.Validator so a webhook will be registered for the type
+func (r *FQDNNetworkPolicy) ValidateCreate(ctx context.Context, policy *FQDNNetworkPolicy) (admission.Warnings, error) {
 	fqdnnetworkpolicylog.Info("validate create", "name", policy.Name)
 
 	var allErrs field.ErrorList
@@ -109,11 +96,7 @@ func (r *FQDNNetworkPolicy) ValidateCreate(ctx context.Context, obj runtime.Obje
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *FQDNNetworkPolicy) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	policy, ok := newObj.(*FQDNNetworkPolicy)
-	if !ok {
-		return nil, fmt.Errorf("expected an FQDNNetworkPolicy but got a %T", newObj)
-	}
+func (r *FQDNNetworkPolicy) ValidateUpdate(ctx context.Context, oldPolicy, policy *FQDNNetworkPolicy) (admission.Warnings, error) {
 	fqdnnetworkpolicylog.Info("validate update", "name", policy.Name)
 
 	var allErrs field.ErrorList
@@ -129,11 +112,7 @@ func (r *FQDNNetworkPolicy) ValidateUpdate(ctx context.Context, oldObj, newObj r
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *FQDNNetworkPolicy) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	policy, ok := obj.(*FQDNNetworkPolicy)
-	if !ok {
-		return nil, fmt.Errorf("expected an FQDNNetworkPolicy but got a %T", obj)
-	}
+func (r *FQDNNetworkPolicy) ValidateDelete(ctx context.Context, policy *FQDNNetworkPolicy) (admission.Warnings, error) {
 	fqdnnetworkpolicylog.Info("validate delete", "name", policy.Name)
 
 	return nil, nil
