@@ -391,7 +391,7 @@ func getNetworkPolicy(name string, namespace string) networking.NetworkPolicy {
 					},
 					Ports: []networking.NetworkPolicyPort{
 						{
-							Protocol: p(v1.ProtocolTCP),
+							Protocol: new(v1.ProtocolTCP),
 							Port: &intstr.IntOrString{
 								IntVal: 443,
 							},
@@ -402,5 +402,3 @@ func getNetworkPolicy(name string, namespace string) networking.NetworkPolicy {
 		},
 	}
 }
-
-func p(p v1.Protocol) *v1.Protocol { return &p }
