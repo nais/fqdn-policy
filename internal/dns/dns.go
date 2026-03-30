@@ -10,7 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/miekg/dns"
+	"codeberg.org/miekg/dns"
+	"codeberg.org/miekg/dns/dnsconf"
+	"codeberg.org/miekg/dns/dnsutil"
 	"github.com/nais/fqdn-policy/api/v1alpha3"
 	metrics "github.com/nais/fqdn-policy/internal/metric"
 	"github.com/sourcegraph/conc/pool"
@@ -25,7 +27,7 @@ import (
 type (
 	Client struct {
 		*dns.Client
-		defaultCfg     *dns.ClientConfig
+		defaultCfg     *dnsconf.Config
 		endpointLister discoverylisterv1.EndpointSliceLister
 		lock           sync.RWMutex
 		domainCache    map[string]Records
@@ -62,7 +64,7 @@ func NewClient(ctx context.Context, k8sclient kubernetes.Interface) (*Client, er
 		}
 	}
 
-	dnscfg, err := dns.ClientConfigFromFile("/etc/resolv.conf")
+	dnscfg, err := dnsconf.FromFile("/etc/resolv.conf")
 	if err != nil {
 		return nil, fmt.Errorf("parsing /etc/resolv.conf: %w", err)
 	}
@@ -168,9 +170,9 @@ func (c *Client) storeRecordsInCache(fqdn, recordType string, records Records) {
 
 func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) (Records, error) {
 	log := ctrllog.FromContext(ctx)
-	f := dns.Fqdn(fqdn)
+	f := dnsutil.Fqdn(fqdn)
 	m := new(dns.Msg)
-	m.SetQuestion(f, questionType)
+	dnsutil.SetQuestion(m, f, questionType)
 
 	recordType := "A"
 	if questionType == dns.TypeAAAA {
@@ -195,7 +197,7 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 	eg := pool.NewWithResults[Records]().WithContext(ctx).WithCancelOnError()
 	for _, addr := range addrs {
 		eg.Go(func(ctx context.Context) (Records, error) {
-			r, _, err := c.ExchangeContext(ctx, m, addr)
+			r, _, err := c.Exchange(ctx, m, "udp", addr)
 			if err != nil {
 				return nil, err
 			}
@@ -206,16 +208,16 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 
 			records := make(Records, 0)
 			for _, ans := range r.Answer {
-				expiresAt := time.Now().Add(time.Second * time.Duration(ans.Header().Ttl))
+				expiresAt := time.Now().Add(time.Second * time.Duration(ans.Header().TTL))
 				switch t := ans.(type) {
 				case *dns.A:
 					records = append(records, Record{
-						IP:        t.A,
+						IP:        t.A.Addr.AsSlice(),
 						ExpiresAt: expiresAt,
 					})
 				case *dns.AAAA:
 					records = append(records, Record{
-						IP:        t.AAAA,
+						IP:        t.AAAA.Addr.AsSlice(),
 						ExpiresAt: expiresAt,
 					})
 				}
