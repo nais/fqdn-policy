@@ -16,10 +16,10 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: jdx/mise-action@v3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # ratchet:jdx/mise-action@v3
       - name: Set up Go
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # ratchet:actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # ratchet:actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
       - run: mise run check
@@ -35,12 +35,12 @@ jobs:
     name: build and push
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: jdx/mise-action@v3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # ratchet:jdx/mise-action@v3
       - id: go_version
         run: echo "go_version=$(mise current go)" >> $GITHUB_OUTPUT
 
-      - uses: nais/platform-build-push-sign@main
+      - uses: nais/platform-build-push-sign@a16d89d06262f12e3468a20b9cc70f5317290bab # ratchet:nais/platform-build-push-sign@main
         id: build_push_sign
         with:
           name: ${{ env.FEATURE_NAME }}
@@ -92,7 +92,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: nais/fasit-deploy@v2
+      - uses: nais/fasit-deploy@8727ed1c7a5a465e837873e6016a9a692a6b874a # ratchet:nais/fasit-deploy@v2
         with:
           chart: ${{ env.FEATURE_REPOSITORY }}/${{ env.NAME }}
           version: ${{ needs.build_and_push.outputs.version }}

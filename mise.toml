@@ -51,6 +51,10 @@ run = "go vet ./..."
 description = "Lint helm chart"
 run = "helm lint --strict ./charts"
 
+[tasks."check:actions-lint"]
+description = "Check for unpinned actions"
+run = "go tool ratchet lint .github/workflows/*.yaml"
+
 [tasks."fmt"]
 description = "Format all code"
 depends = ['fmt:go', 'fmt:gofix']
@@ -83,3 +87,11 @@ run = 'KUBEBUILDER_ASSETS="$(pwd)/$(go tool setup-envtest use $ENVTEST_K8S_VERSI
 [tasks."envtest:versions"]
 description = "List available Kubernetes versions for envtest"
 run = "go tool setup-envtest list"
+
+[tasks."actions:update"]
+description = "Upgrade all github actions to latest version satisfying their version tag"
+run = "go tool ratchet update .github/workflows/*.yaml"
+
+[tasks."actions:upgrade"]
+description = "Upgrade all github actions to latest"
+run = "go tool ratchet upgrade .github/workflows/*.yaml"
