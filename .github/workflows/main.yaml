@@ -54,10 +54,6 @@ jobs:
           build_args: |
             GO_VERSION=${{ steps.go_version.outputs.go_version }}
 
-      - name: Push Chart
-        run: |-
-          helm push ${{ env.NAME }}*.tgz ${{ env.FEATURE_REPOSITORY }}
-
       - name: Package chart
         id: package_chart
         env:
