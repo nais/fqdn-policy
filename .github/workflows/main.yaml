@@ -93,5 +93,5 @@ jobs:
     steps:
       - uses: nais/fasit-deploy@8727ed1c7a5a465e837873e6016a9a692a6b874a # ratchet:nais/fasit-deploy@v2
         with:
-          chart: ${{ env.FEATURE_REPOSITORY }}/${{ env.NAME }}
+          chart: ${{ env.FEATURE_REPOSITORY }}/${{ env.FEATURE_NAME }}
           version: ${{ needs.build_and_push.outputs.version }}
