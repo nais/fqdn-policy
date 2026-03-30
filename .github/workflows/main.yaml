@@ -59,30 +59,25 @@ jobs:
         env:
           CHART_PATH: ./charts
         run: |
-          base_version="$(yq '.version' < "${{ env.CHART_PATH }}/Chart.yaml")"
-          chart_version="${base_version}-${{ steps.build_push_sign.outputs.version }}"
+          chart_version="$(yq '.version' < "${{ env.CHART_PATH }}/Chart.yaml")-${{ steps.build_push_sign.outputs.version }}"
 
-          yq eval \
-            '.version="'"$chart_version"'"' \
-            "${{ env.CHART_PATH }}/Chart.yaml" --inplace
-          yq eval \
-            '.image.tag="${{ steps.build_push_sign.outputs.version }}"' \
-            "${{ env.CHART_PATH }}/values.yaml" --inplace
+          yq e -i '.version="'"$chart_version"'"' "${{ env.CHART_PATH }}/Chart.yaml"
+          yq e -i '.image.tag="${{ steps.build_push_sign.outputs.version }}"' "${{ env.CHART_PATH }}/values.yaml"
 
-          # helm dependency update "${{ env.CHART_PATH }}"
           helm package "${{ env.CHART_PATH }}" --destination .
 
           name=$(yq '.name' < "${{ env.CHART_PATH }}/Chart.yaml")
           echo "name=$name" >> $GITHUB_OUTPUT
           echo "version=$chart_version" >> $GITHUB_OUTPUT
           echo "archive=$name-$chart_version.tgz" >> $GITHUB_OUTPUT
+
       - name: Push Chart
         run: |-
           chart="${{ steps.package_chart.outputs.archive }}"
           echo "Pushing: $chart"
           helm push "$chart" ${{ env.FEATURE_REPOSITORY }}
     outputs:
-      version: ${{ steps.build_push_sign.outputs.version }}
+      version: ${{ steps.package_chart.outputs.version }}
 
   rollout:
     needs:
