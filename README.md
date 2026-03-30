@@ -103,10 +103,10 @@ helm install fqdn-policy oci://europe-north1-docker.pkg.dev/nais-io/nais/feature
 
 ## Development
 
-For available Makefile targets, run:
+Requires [mise](https://mise.jdx.dev). Run a task with:
 
 ```shell
-make help
+mise run
 ```
 
 ## Acknowledgements

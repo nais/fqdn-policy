@@ -2,5 +2,84 @@
 pin = true
 
 [tools]
-go = "1.24.6"
+go = "1.26.1"
 helm = "3.17.1"
+
+[tasks."build"]
+description = "Build the manager binary"
+run = "go build -o bin/manager main.go"
+depends = ['generate', 'fmt', 'check:vet']
+
+[tasks."run"]
+description = "Run the controller from your host"
+run = "go run ./main.go"
+depends = ['generate', 'fmt']
+
+[tasks."check"]
+description = "Run all static analysis tools"
+depends = [
+    'fmt',
+    'check:staticcheck',
+    'check:vulncheck',
+    'check:deadcode',
+    'check:vet',
+    'check:helm-lint'
+]
+
+[tasks."check:deadcode"]
+description = "Run deadcode"
+run = "go tool golang.org/x/tools/cmd/deadcode -test ./..."
+
+[tasks."check:gosec"]
+description = "Run gosec"
+run = "go tool github.com/securego/gosec/v2/cmd/gosec --exclude-generated -terse ./..."
+
+[tasks."check:staticcheck"]
+description = "Run staticcheck"
+run = "go tool honnef.co/go/tools/cmd/staticcheck ./..."
+
+[tasks."check:vulncheck"]
+description = "Run vulncheck"
+run = "go tool golang.org/x/vuln/cmd/govulncheck ./..."
+
+[tasks."check:vet"]
+description = "Run go vet"
+wait_for = ['fmt']
+run = "go vet ./..."
+
+[tasks."check:helm-lint"]
+description = "Lint helm chart"
+run = "helm lint --strict ./charts"
+
+[tasks."fmt"]
+description = "Format all code"
+depends = ['fmt:go', 'fmt:gofix']
+
+[tasks."fmt:go"]
+description = "Format go code using gofumpt"
+run = "go tool mvdan.cc/gofumpt -w ./"
+
+[tasks."fmt:gofix"]
+description = "Fix runs the Go fix tool (cmd/fix) on the named packages and applies suggested fixes."
+run = "go fix ./..."
+
+[tasks.generate]
+description = "Generate all"
+depends = ['generate:manifests', 'generate:deepcopy']
+
+[tasks."generate:manifests"]
+description = "Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects"
+run = 'go tool controller-gen crd paths="./..." output:crd:artifacts:config=charts/crds'
+
+[tasks."generate:deepcopy"]
+description = "Generate DeepCopy, DeepCopyInto, and DeepCopyObject method implementations"
+run = 'go tool controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."'
+
+[tasks."test"]
+description = "Run tests"
+env = { ENVTEST_K8S_VERSION = "1.33.0" } # see "envtest:versions" task for available versions
+run = 'KUBEBUILDER_ASSETS="$(pwd)/$(go tool setup-envtest use $ENVTEST_K8S_VERSION --bin-dir bin -p path)" go test ./... -coverprofile cover.out'
+
+[tasks."envtest:versions"]
+description = "List available Kubernetes versions for envtest"
+run = "go tool setup-envtest list"
