@@ -34,6 +34,7 @@ jobs:
       - tests
     permissions:
       id-token: "write"
+      packages: "write"
     name: build and push
     runs-on: ubuntu-latest
     steps:
