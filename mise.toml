@@ -2,7 +2,7 @@
 pin = true
 
 [tools]
-go = "1.26.1"
+go = "1.26.3"
 helm = "3.17.1"
 
 [tasks."build"]
