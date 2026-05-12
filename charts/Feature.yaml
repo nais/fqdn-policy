@@ -4,7 +4,6 @@ dependencies:
 environmentKinds:
   - tenant
   - management
-  - legacy
 values:
   image.tag:
     displayName: Image version
