@@ -2,8 +2,8 @@
 pin = true
 
 [tools]
-go = "1.26.3"
-helm = "3.17.1"
+go = "1.26.4"
+helm = "3.21.2"
 
 [tasks."build"]
 description = "Build the manager binary"
