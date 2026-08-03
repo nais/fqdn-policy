@@ -13,7 +13,7 @@ tool (
 )
 
 require (
-	codeberg.org/miekg/dns v0.6.84
+	codeberg.org/miekg/dns v0.6.86
 	github.com/go-logr/logr v1.4.4
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1
