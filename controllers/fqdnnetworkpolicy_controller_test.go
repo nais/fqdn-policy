@@ -373,10 +373,8 @@ func getFQDNNetworkPolicy(name string, namespace string) networkingv1alpha3.FQDN
 
 func getNetworkPolicy(name string, namespace string) networking.NetworkPolicy {
 	return networking.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 		Spec: networking.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{},
 			PolicyTypes: []networking.PolicyType{networking.PolicyTypeEgress},
