@@ -157,6 +157,7 @@ func (c *Client) kubeDNSIPs() ([]string, error) {
 				}
 
 				servers = append(servers, formattedAddr)
+			}
 		}
 	}
 	if len(servers) == 0 {
