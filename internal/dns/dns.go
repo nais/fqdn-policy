@@ -143,7 +143,21 @@ func (c *Client) kubeDNSIPs() ([]string, error) {
 			if ep.Conditions.Terminating != nil && *ep.Conditions.Terminating {
 				continue
 			}
-			servers = append(servers, ep.Addresses...)
+
+			for _, a := range ep.Addresses {
+				ip := net.ParseIP(a)
+
+				if ip == nil {
+					continue
+				}
+
+				formattedAddr := a
+				if ip.To4() == nil {
+					formattedAddr = "[" + a + "]"
+				}
+
+				servers = append(servers, formattedAddr)
+			}
 		}
 	}
 	if len(servers) == 0 {
