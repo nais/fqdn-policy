@@ -51,6 +51,7 @@ jobs:
           workload_identity_provider: ${{ secrets.NAIS_IO_WORKLOAD_IDENTITY_PROVIDER }}
           push: true
           push_ghcr: true
+          multi-platform: true
           build_args: |
             GO_VERSION=${{ steps.go_version.outputs.go_version }}
 
