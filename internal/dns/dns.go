@@ -42,8 +42,6 @@ type (
 )
 
 func NewClient(ctx context.Context, k8sclient kubernetes.Interface) (*Client, error) {
-	c := new(dns.Client)
-
 	var lister discoverylisterv1.EndpointSliceLister
 	if isKubernetes() {
 		inf := informers.NewSharedInformerFactoryWithOptions(
@@ -70,7 +68,7 @@ func NewClient(ctx context.Context, k8sclient kubernetes.Interface) (*Client, er
 	}
 
 	return &Client{
-		Client:         c,
+		Client:         dns.NewClient(), // Eagerly initialize transport for concurrent queries.
 		defaultCfg:     dnscfg,
 		endpointLister: lister,
 		domainCache:    make(map[string]Records),
@@ -185,9 +183,6 @@ func (c *Client) storeRecordsInCache(fqdn, recordType string, records Records) {
 func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) (Records, error) {
 	log := ctrllog.FromContext(ctx)
 	f := dnsutil.Fqdn(fqdn)
-	m := new(dns.Msg)
-	dnsutil.SetQuestion(m, f, questionType)
-
 	recordType := "A"
 	if questionType == dns.TypeAAAA {
 		recordType = "AAAA"
@@ -211,6 +206,8 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 	eg := pool.NewWithResults[Records]().WithContext(ctx).WithCancelOnError()
 	for _, addr := range addrs {
 		eg.Go(func(ctx context.Context) (Records, error) {
+			m := new(dns.Msg)
+			dnsutil.SetQuestion(m, f, questionType)
 			r, _, err := c.Exchange(ctx, m, "udp", addr)
 			if err != nil {
 				return nil, err

@@ -90,7 +90,7 @@ run = 'controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."'
 [tasks."test"]
 description = "Run tests"
 env = { ENVTEST_K8S_VERSION = "1.33.0" } # see "envtest:versions" task for available versions
-run = 'KUBEBUILDER_ASSETS="$(pwd)/$(setup-envtest use $ENVTEST_K8S_VERSION --bin-dir bin -p path)" go test ./... -coverprofile cover.out'
+run = 'KUBEBUILDER_ASSETS="$(pwd)/$(setup-envtest use $ENVTEST_K8S_VERSION --bin-dir bin -p path)" go test -race ./... -coverprofile cover.out'
 
 [tasks."envtest:versions"]
 description = "List available Kubernetes versions for envtest"
