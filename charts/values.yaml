@@ -36,6 +36,9 @@ controller:
 alerts:
   enabled: true
 
+podMonitor:
+  enabled: true
+
 fasit:
   tenant:
     name: "unknown"
