@@ -25,7 +25,7 @@ spec:
     - Egress
 ```
 
-The fqdn-policy controller in turn creates (and owns) a corresponding `NetworkPolicy` with the domains now resolved to IP addresses:
+The fqdn-policy controller, in turn, creates (and owns) a corresponding `NetworkPolicy` with the domains now resolved to IP addresses:
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -76,14 +76,14 @@ There are a few functional limitations to `FQDNNetworkPolicies`:
 * When using an [IDN](https://en.wikipedia.org/wiki/Internationalized_domain_name),
   use the punycode equivalent as the locale used inside the controller might not
   be compatible with your locale.
-* Due to the how `NetworkPolicy` works, the use of `FQDNNetworkPolicies` will allow traffic to multiple hosts resolve that to the same IP address as soon as one host is allowed.
+* Due to how `NetworkPolicy` works, `FQDNNetworkPolicies` allow traffic to multiple hosts that resolve to the same IP address as soon as one host is allowed.
 
 ## Alternative solutions
 
 - Some service meshes such as Istio (via [Egress gateways](https://istio.io/latest/docs/tasks/traffic-management/egress/egress-gateway/)) support proxy-based solutions for restricting traffic based on FQDNs.
 This uses TLS SNI instead of DNS resolution to determine the destination, which is only applicable for HTTPS traffic.
 - Some CNI plugins such as Cilium (via [CiliumNetworkPolicy](https://docs.cilium.io/en/stable/network/kubernetes/policy/#ciliumnetworkpolicy)) can intercept DNS-based traffic and enforce policies based on DNS names.
-- There is an active proposal for the NetworkPolicy API project (part of [SIG-Network](https://github.com/kubernetes/community/tree/master/sig-network) in Kubernetes) to support FQDN selectors for egress traffic in [NPEP-133](https://github.com/kubernetes-sigs/network-policy-api/blob/main/npeps/npep-133-fqdn-egress-selector.md)
+- There is an active proposal for the NetworkPolicy API project (part of [SIG-Network](https://github.com/kubernetes/community/tree/master/sig-network) in Kubernetes) to support FQDN selectors for egress traffic in [NPEP-133](https://github.com/kubernetes-sigs/network-policy-api/blob/main/npeps/npep-133-fqdn-egress-selector.md).
 
 ## Installation
 
@@ -94,7 +94,7 @@ helm install fqdn-policy ./charts
 ```
 
 From repository
-```
+```shell
 helm install fqdn-policy oci://europe-north1-docker.pkg.dev/nais-io/nais/feature/fqdn-policy \
     --namespace fqdn-policy \
     --create-namespace \
@@ -111,5 +111,5 @@ mise run
 
 ## Acknowledgements
 
-- [GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang](https://github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang) - the original project of which this is a fork of
+- [GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang](https://github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang) - the original project from which this project was forked
 - [delta10/fqdnnetworkpolicies](https://github.com/delta10/fqdnnetworkpolicies) - a fork of this project with similar improvements (some of which we've incorporated here)
