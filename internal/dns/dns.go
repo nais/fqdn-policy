@@ -115,7 +115,7 @@ func (c *Client) dnsAddresses() ([]string, error) {
 
 	addrs := make([]string, 0, len(ips))
 	for _, ip := range ips {
-		addrs = append(addrs, ip+":"+port)
+		addrs = append(addrs, net.JoinHostPort(ip, port))
 	}
 	return addrs, nil
 }
@@ -143,18 +143,11 @@ func (c *Client) kubeDNSIPs() ([]string, error) {
 			}
 
 			for _, a := range ep.Addresses {
-				ip := net.ParseIP(a)
-
-				if ip == nil {
+				if net.ParseIP(a) == nil {
 					continue
 				}
 
-				formattedAddr := a
-				if ip.To4() == nil {
-					formattedAddr = "[" + a + "]"
-				}
-
-				servers = append(servers, formattedAddr)
+				servers = append(servers, a)
 			}
 		}
 	}
