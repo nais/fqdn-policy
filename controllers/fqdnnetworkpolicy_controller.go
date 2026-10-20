@@ -193,8 +193,8 @@ func (r *FQDNNetworkPolicyReconciler) createOrUpdateNetworkPolicy(ctx context.Co
 		nextSync = time.Second
 	}
 
-	networkPolicy.ObjectMeta.Name = fqdnNetworkPolicy.Name
-	networkPolicy.ObjectMeta.Namespace = fqdnNetworkPolicy.Namespace
+	networkPolicy.Name = fqdnNetworkPolicy.Name
+	networkPolicy.Namespace = fqdnNetworkPolicy.Namespace
 
 	res, err := controllerutil.CreateOrUpdate(ctx, r.Client, networkPolicy, func() error {
 		if networkPolicy.Annotations == nil {

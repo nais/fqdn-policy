@@ -50,8 +50,8 @@ func (r *FQDNNetworkPolicy) Default(ctx context.Context, policy *FQDNNetworkPoli
 			for ip, port := range rule.Ports {
 				if *port.Protocol == "" {
 					fqdnnetworkpolicylog.V(1).Info("No protocol set, defaulting to TCP",
-						"namespace", policy.ObjectMeta.Namespace,
-						"name", policy.ObjectMeta.Name,
+						"namespace", policy.Namespace,
+						"name", policy.Name,
 						"path", field.NewPath("spec").Child("egress").
 							Index(ie).Child("ports").Index(ip).String())
 					*port.Protocol = v1.ProtocolTCP
@@ -64,8 +64,8 @@ func (r *FQDNNetworkPolicy) Default(ctx context.Context, policy *FQDNNetworkPoli
 			for ip, port := range rule.Ports {
 				if *port.Protocol == "" {
 					fqdnnetworkpolicylog.V(1).Info("No protocol set, defaulting to TCP",
-						"namespace", policy.ObjectMeta.Namespace,
-						"name", policy.ObjectMeta.Name,
+						"namespace", policy.Namespace,
+						"name", policy.Name,
 						"path", field.NewPath("spec").Child("ingress").
 							Index(ii).Child("ports").Index(ip).String())
 					*port.Protocol = v1.ProtocolTCP
@@ -132,8 +132,8 @@ func (r *FQDNNetworkPolicy) ValidatePorts() field.ErrorList {
 				}
 				if port.Port.IntVal == 0 {
 					fqdnnetworkpolicylog.Info("port not set or set to 0, will match all ports",
-						"name", r.ObjectMeta.Name,
-						"namespace", r.ObjectMeta.Namespace,
+						"name", r.Name,
+						"namespace", r.Namespace,
 						"resource", field.NewPath("spec").Child("egress").
 							Index(ie).Child("ports").Index(ip).Child("port").String())
 				}
@@ -156,8 +156,8 @@ func (r *FQDNNetworkPolicy) ValidatePorts() field.ErrorList {
 				}
 				if port.Port.IntVal == 0 {
 					fqdnnetworkpolicylog.Info("port not set or set to 0, will match all ports",
-						"name", r.ObjectMeta.Name,
-						"namespace", r.ObjectMeta.Namespace,
+						"name", r.Name,
+						"namespace", r.Namespace,
 						"resource", field.NewPath("spec").Child("ingress").
 							Index(ii).Child("ports").Index(ip).Child("port").String())
 				}

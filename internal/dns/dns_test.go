@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"slices"
 	"testing"
+	"time"
 
 	mdns "codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsconf"
@@ -49,6 +50,55 @@ func TestResolveFQDNsQueriesServersConcurrently(t *testing.T) {
 			t.Fatalf("unexpected addresses: %v", addresses)
 		}
 	}
+}
+
+func TestRecordsHelpers(t *testing.T) {
+	t.Run("empty records", func(t *testing.T) {
+		var records Records
+		if ttl, ok := records.LowestTTL(); ok || ttl != 0 {
+			t.Fatalf("LowestTTL() = (%d, %t), want (0, false)", ttl, ok)
+		}
+		if !records.HasExpired() {
+			t.Fatal("HasExpired() = false, want true for empty records")
+		}
+		if peers := records.AsNetworkPolicyPeers(); len(peers) != 0 {
+			t.Fatalf("AsNetworkPolicyPeers() returned %d peers, want 0", len(peers))
+		}
+	})
+
+	t.Run("valid records", func(t *testing.T) {
+		expiresAt := time.Now().Add(20 * time.Second)
+		records := Records{
+			{IP: net.IP{192, 0, 2, 1}, ExpiresAt: expiresAt.Add(time.Minute)},
+			{IP: net.ParseIP("2001:db8::1"), ExpiresAt: expiresAt},
+			{IP: net.IP{192, 0, 2, 1}, ExpiresAt: expiresAt},
+		}
+
+		ttl, ok := records.LowestTTL()
+		if !ok || ttl < 18 || ttl > 20 {
+			t.Fatalf("LowestTTL() = (%d, %t), want a TTL close to 20 seconds", ttl, ok)
+		}
+		if records.HasExpired() {
+			t.Fatal("HasExpired() = true, want false for unexpired records")
+		}
+
+		peers := records.AsNetworkPolicyPeers()
+		if len(peers) != 2 {
+			t.Fatalf("AsNetworkPolicyPeers() returned %d peers, want 2 after deduplication", len(peers))
+		}
+		got := []string{peers[0].IPBlock.CIDR, peers[1].IPBlock.CIDR}
+		want := []string{"192.0.2.1/32", "2001:db8::1/128"}
+		if !slices.Equal(got, want) {
+			t.Fatalf("AsNetworkPolicyPeers() CIDRs = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("expired record", func(t *testing.T) {
+		records := Records{{IP: net.IP{192, 0, 2, 1}, ExpiresAt: time.Now().Add(-time.Second)}}
+		if !records.HasExpired() {
+			t.Fatal("HasExpired() = false, want true for expired records")
+		}
+	})
 }
 
 func startDNSServer(t *testing.T, address, responseIP string) (func(), string) {
