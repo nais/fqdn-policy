@@ -4,6 +4,7 @@ dependencies:
 environmentKinds:
   - tenant
   - management
+  - onprem
 values:
   image.tag:
     displayName: Image version
