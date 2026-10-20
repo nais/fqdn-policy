@@ -29,6 +29,7 @@ resources:
 deploymentAnnotations: {}
 
 controller:
+  enabled: true
   logLevel: "error"
   nextSyncPeriod: 3600
   maxConcurrentReconciles: 10
