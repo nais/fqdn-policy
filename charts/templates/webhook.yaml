@@ -1,3 +1,4 @@
+{{- if .Values.controller.enabled }}
 ---
 apiVersion: v1
 kind: Service
@@ -69,3 +70,4 @@ webhooks:
     resources:
     - fqdnnetworkpolicies
   sideEffects: None
+{{- end }} # if controller.enabled

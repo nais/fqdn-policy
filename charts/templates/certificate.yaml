@@ -1,3 +1,4 @@
+{{- if .Values.controller.enabled }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Issuer
@@ -18,3 +19,4 @@ spec:
     kind: Issuer
     name: fqdnnetworkpolicies-selfsigned-issuer
   secretName: {{ .Release.Name }}-webhook-server-cert
+{{- end }} # if controller.enabled
