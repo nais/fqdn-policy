@@ -1,4 +1,4 @@
-{{- if and .Values.controller.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
+{{- if .Capabilities.APIVersions.Has "monitoring.coreos.com/v1"}}
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
@@ -17,4 +17,4 @@ spec:
   selector:
     matchLabels:
       {{- include "fqdn-policy.selectorLabels" . | nindent 6 }}
-{{- end }}{{/* if controller.enabled & monitoring enabled */}}
+{{- end }}

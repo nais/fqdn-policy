@@ -1,4 +1,4 @@
-{{- if and .Values.controller.enabled .Values.alerts.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
+{{- if and .Values.alerts.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -35,4 +35,4 @@ spec:
             action: |
               Check dashboard and logs in `{{"{{ $labels.namespace }}`/`{{ $labels.pod }}"}}`
             dashboard_url: "https://monitoring.nais.io/d/fefi4qz2462v4f/fqdn-policy-controller?var-tenant={{.Values.fasit.tenant.name }}&var-cluster={{ .Values.fasit.env.name }}"
-{{- end }}{{/* if controller.enabled & alerts.enabled & monitoring enabled */}}
+{{- end }}

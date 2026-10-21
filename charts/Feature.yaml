@@ -4,7 +4,6 @@ dependencies:
 environmentKinds:
   - tenant
   - management
-  - onprem
 values:
   image.tag:
     displayName: Image version
@@ -26,12 +25,6 @@ values:
     displayName: Memory request
     config:
       type: string
-  controller.enabled:
-    computed:
-      template: "false"
-    ignoreKind:
-      - tenant
-      - management
   controller.logLevel:
     displayName: Log level
     config:
