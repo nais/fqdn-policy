@@ -97,6 +97,5 @@ jobs:
               { "target": { "kind": "tenant", "tenant": "ci-nais" }, "wait": true },
               { "target": { "kind": "management", "tenant": "ci-nais" }, "wait": true },
               { "target": { "kind": "tenant" } },
-              { "target": { "kind": "onprem" } },
               { "target": { "kind": "management" } }
             ]
