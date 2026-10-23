@@ -132,10 +132,10 @@ func TestDefault(t *testing.T) {
 	policy := &FQDNNetworkPolicy{
 		Spec: FQDNNetworkPolicySpec{
 			Egress: []FQDNNetworkPolicyEgressRule{{
-				Ports: []networkingv1.NetworkPolicyPort{{Protocol: protocolPointer("")}},
+				Ports: []networkingv1.NetworkPolicyPort{{Protocol: new(v1.Protocol(""))}},
 			}},
 			Ingress: []FQDNNetworkPolicyIngressRule{{
-				Ports: []networkingv1.NetworkPolicyPort{{Protocol: protocolPointer("")}},
+				Ports: []networkingv1.NetworkPolicyPort{{Protocol: new(v1.Protocol(""))}},
 			}},
 		},
 	}
@@ -150,7 +150,7 @@ func TestDefault(t *testing.T) {
 		t.Errorf("ingress protocol = %q, want %q", got, v1.ProtocolTCP)
 	}
 
-	policy.Spec.Egress[0].Ports[0].Protocol = protocolPointer(v1.ProtocolUDP)
+	policy.Spec.Egress[0].Ports[0].Protocol = new(v1.ProtocolUDP)
 	policy.Spec.Ingress[0].Ports = nil
 	if err := policy.Default(context.Background(), policy); err != nil {
 		t.Fatalf("Default() with configured protocol and nil ports error = %v", err)
@@ -181,13 +181,29 @@ func TestValidatePortsOutOfRangeIngressAndEgress(t *testing.T) {
 		},
 	}
 
-	if errs := policy.ValidatePorts(); len(errs) != 2 {
+	errs := policy.ValidatePorts()
+	if len(errs) != 2 {
 		t.Fatalf("ValidatePorts() returned %d errors, want 2: %v", len(errs), errs)
 	}
-}
 
-func protocolPointer(protocol v1.Protocol) *v1.Protocol {
-	return &protocol
+	want := map[string]*intstr.IntOrString{
+		"spec.egress[0].ports[0].port":  &egressPort,
+		"spec.ingress[0].ports[0].port": &ingressPort,
+	}
+	for _, err := range errs {
+		badValue, ok := want[err.Field]
+		if !ok {
+			t.Errorf("ValidatePorts() returned unexpected field %q", err.Field)
+			continue
+		}
+		if err.BadValue != badValue {
+			t.Errorf("ValidatePorts() error for %q has rejected value %v, want %v", err.Field, err.BadValue, badValue)
+		}
+		delete(want, err.Field)
+	}
+	for field := range want {
+		t.Errorf("ValidatePorts() did not return an error for %q", field)
+	}
 }
 
 func TestValidateFQDNs(t *testing.T) {
