@@ -19,6 +19,10 @@ package v1alpha3
 import (
 	"context"
 	"testing"
+
+	v1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func TestValidateCreate(t *testing.T) {
@@ -121,6 +125,84 @@ func TestValidatePorts(t *testing.T) {
 	r.LoadResource("./config/samples/networking_v1alpha3_fqdnnetworkpolicy_invalid_protocol.yaml")
 	if r.ValidatePorts() == nil {
 		t.Error("Resource with invalid protocol marked as valid")
+	}
+}
+
+func TestDefault(t *testing.T) {
+	policy := &FQDNNetworkPolicy{
+		Spec: FQDNNetworkPolicySpec{
+			Egress: []FQDNNetworkPolicyEgressRule{{
+				Ports: []networkingv1.NetworkPolicyPort{{Protocol: new(v1.Protocol(""))}},
+			}},
+			Ingress: []FQDNNetworkPolicyIngressRule{{
+				Ports: []networkingv1.NetworkPolicyPort{{Protocol: new(v1.Protocol(""))}},
+			}},
+		},
+	}
+
+	if err := policy.Default(context.Background(), policy); err != nil {
+		t.Fatalf("Default() error = %v", err)
+	}
+	if got := *policy.Spec.Egress[0].Ports[0].Protocol; got != v1.ProtocolTCP {
+		t.Errorf("egress protocol = %q, want %q", got, v1.ProtocolTCP)
+	}
+	if got := *policy.Spec.Ingress[0].Ports[0].Protocol; got != v1.ProtocolTCP {
+		t.Errorf("ingress protocol = %q, want %q", got, v1.ProtocolTCP)
+	}
+
+	policy.Spec.Egress[0].Ports[0].Protocol = new(v1.ProtocolUDP)
+	policy.Spec.Ingress[0].Ports = nil
+	if err := policy.Default(context.Background(), policy); err != nil {
+		t.Fatalf("Default() with configured protocol and nil ports error = %v", err)
+	}
+	if got := *policy.Spec.Egress[0].Ports[0].Protocol; got != v1.ProtocolUDP {
+		t.Errorf("configured egress protocol changed to %q", got)
+	}
+}
+
+func TestValidatePortsOutOfRangeIngressAndEgress(t *testing.T) {
+	protocol := v1.ProtocolTCP
+	egressPort := intstr.FromInt32(65536)
+	ingressPort := intstr.FromInt32(-1)
+	policy := &FQDNNetworkPolicy{
+		Spec: FQDNNetworkPolicySpec{
+			Egress: []FQDNNetworkPolicyEgressRule{{
+				Ports: []networkingv1.NetworkPolicyPort{{
+					Port:     &egressPort,
+					Protocol: &protocol,
+				}},
+			}},
+			Ingress: []FQDNNetworkPolicyIngressRule{{
+				Ports: []networkingv1.NetworkPolicyPort{{
+					Port:     &ingressPort,
+					Protocol: &protocol,
+				}},
+			}},
+		},
+	}
+
+	errs := policy.ValidatePorts()
+	if len(errs) != 2 {
+		t.Fatalf("ValidatePorts() returned %d errors, want 2: %v", len(errs), errs)
+	}
+
+	want := map[string]*intstr.IntOrString{
+		"spec.egress[0].ports[0].port":  &egressPort,
+		"spec.ingress[0].ports[0].port": &ingressPort,
+	}
+	for _, err := range errs {
+		badValue, ok := want[err.Field]
+		if !ok {
+			t.Errorf("ValidatePorts() returned unexpected field %q", err.Field)
+			continue
+		}
+		if err.BadValue != badValue {
+			t.Errorf("ValidatePorts() error for %q has rejected value %v, want %v", err.Field, err.BadValue, badValue)
+		}
+		delete(want, err.Field)
+	}
+	for field := range want {
+		t.Errorf("ValidatePorts() did not return an error for %q", field)
 	}
 }
 

@@ -216,12 +216,12 @@ func (c *Client) resolve(ctx context.Context, fqdn string, questionType uint16) 
 				switch t := ans.(type) {
 				case *dns.A:
 					records = append(records, Record{
-						IP:        t.A.Addr.AsSlice(),
+						IP:        t.Addr.AsSlice(),
 						ExpiresAt: expiresAt,
 					})
 				case *dns.AAAA:
 					records = append(records, Record{
-						IP:        t.AAAA.Addr.AsSlice(),
+						IP:        t.Addr.AsSlice(),
 						ExpiresAt: expiresAt,
 					})
 				}
